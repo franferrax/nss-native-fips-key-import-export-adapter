@@ -88,6 +88,31 @@ void DESTRUCTOR_FUNCTION library_destructor(void) {
 }
 */
 
+// Call FIPS implementation of C_GetInterface and apply decorations
+WITH_FIPS_PROTOTYPE(CK_RV, C_GetInterface,
+  CK_UTF8CHAR_PTR pInterfaceName,
+  CK_VERSION_PTR pVersion,
+  CK_INTERFACE_PTR_PTR ppInterface,
+  CK_FLAGS flags
+) {
+    CK_RV ret = FC_GetInterface(pInterfaceName, pVersion, ppInterface, flags);
+    if (ret == CKR_OK) {
+        // NOTE: the PKCS #11 v3.0 standard states 'CK_FUNCTION_LIST_3_0
+        // is a structure which contains the same function pointers as in
+        // CK_FUNCTION_LIST and additional functions added to the end of
+        // the structure that were defined in Cryptoki version 3.0'. This
+        // implies that we can safely use CK_FUNCTION_LIST regardless of
+        // the version, as long as it contains all the functions we need
+        // to decorate, which is our case.
+        CK_FUNCTION_LIST_PTR pFunctionList = (*ppInterface)->pFunctionList;
+        DECORATE(C_CreateObject, pFunctionList);
+        DECORATE(C_GetAttributeValue, pFunctionList);
+        dbg_trace("NSS PKCS #11 v%d.%d, libsoftokn3.so successfully adapted",
+                  pFunctionList->version.major, pFunctionList->version.minor);
+    }
+    return ret;
+}
+
 // Call FIPS implementation of C_GetFunctionList and apply decorations
 WITH_FIPS_PROTOTYPE(CK_RV, C_GetFunctionList,
   CK_FUNCTION_LIST_PTR_PTR ppFunctionList
