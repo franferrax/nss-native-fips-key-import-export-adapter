@@ -17,16 +17,21 @@
 // Declare a function wrapper/decorator, along with a function pointer
 // to keep a reference to the original wrapped/decorated function
 #define DECLARE_DECORATOR(ret_type, name, ...)                                 \
-        static ret_type (*ORIGINAL(name))(__VA_ARGS__) = NULL;                 \
-        ret_type DECORATOR(name)(__VA_ARGS__)
+    static ret_type (*ORIGINAL(name))(__VA_ARGS__) = NULL;                     \
+    ret_type DECORATOR(name)(__VA_ARGS__)
 
-// Apply a declared function wrapper/decorator, inside C_GetFunctionList()
-#define DECORATE(name) do {                                                    \
-    ORIGINAL(name) = (*ppFunctionList)->name;                                  \
+// Apply a declared function wrapper/decorator to a function list
+#define DECORATE(name, pFunctionList) do {                                     \
+    ORIGINAL(name) = (pFunctionList)->name;                                    \
     dbg_trace("Decorating " #name " (replacing " HEX64 " by " HEX64 ")",       \
               (uintptr_t)ORIGINAL(name), (uintptr_t)DECORATOR(name));          \
-    (*ppFunctionList)->name = DECORATOR(name);                                 \
+    (pFunctionList)->name = DECORATOR(name);                                   \
 } while(0)
+
+// Define a function having its NSS FIPS prototype (FC_... proto + C_... func)
+#define WITH_FIPS_PROTOTYPE(ret_type, name, ...)                               \
+    ret_type F ## name(__VA_ARGS__);                                           \
+    ret_type name(__VA_ARGS__)
 
 
 /* ****************************************************************************
@@ -83,13 +88,15 @@ void DESTRUCTOR_FUNCTION library_destructor(void) {
 }
 */
 
-// Prototype for NSS internal FIPS implementation of C_GetFunctionList
-CK_RV FC_GetFunctionList(CK_FUNCTION_LIST_PTR_PTR ppFunctionList);
-
 // Call FIPS implementation of C_GetFunctionList and apply decorations
-CK_RV C_GetFunctionList(CK_FUNCTION_LIST_PTR_PTR ppFunctionList) {
+WITH_FIPS_PROTOTYPE(CK_RV, C_GetFunctionList,
+  CK_FUNCTION_LIST_PTR_PTR ppFunctionList
+) {
     CK_RV ret = FC_GetFunctionList(ppFunctionList);
-    DECORATE(C_CreateObject);
-    DECORATE(C_GetAttributeValue);
+    if (ret == CKR_OK) {
+        DECORATE(C_CreateObject, *ppFunctionList);
+        DECORATE(C_GetAttributeValue, *ppFunctionList);
+        dbg_trace("NSS PKCS #11, libsoftokn3.so successfully adapted");
+    }
     return ret;
 }
