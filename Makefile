@@ -10,8 +10,9 @@ CC            = gcc
 LIBS          = softokn3
 INCLUDES      = /usr/include/nspr4
 CFLAGS        = -shared -fPIC $(addprefix -l,$(LIBS)) $(addprefix -I,$(INCLUDES)) \
-                -pedantic -Wall -Wextra -Wconversion -Werror
-DBG_CFLAGS    = -DDEBUG
+                -Wpedantic -Wall -Wextra -Wconversion -Werror
+REL_CFLAGS    = -O3
+DBG_CFLAGS    = -O0 -DDEBUG
 
 
 #
@@ -26,6 +27,7 @@ else
 endif
 
 .PHONY: release
+release: CFLAGS += $(REL_CFLAGS)
 release: $(CLEAN_IF_BUILT_MODE_IS_DEBUG) $(OUTPUT)  ## Build in RELEASE mode (default)
 
 .PHONY: debug
