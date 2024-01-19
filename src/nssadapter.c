@@ -68,13 +68,13 @@ DECLARE_DECORATOR(CK_RV, C_CreateObject,
   CK_ULONG ulCount,
   CK_OBJECT_HANDLE_PTR phObject
 ) {
-    dbg_trace("Forwarding to original function, parameters:"
-              "\n   hSession = " HEX32
-              "\n  pTemplate = " HEX64
-              "\n    ulCount = %lu"
-              "\n   phObject = " HEX64,
-              hSession, (uintptr_t)pTemplate, ulCount, (uintptr_t)phObject);
-    return ORIGINAL(C_CreateObject)(hSession, pTemplate, ulCount, phObject);
+    CK_RV ret = ORIGINAL(C_CreateObject)(hSession, pTemplate,
+                                         ulCount, phObject);
+    dbg_trace("Forwarded to original function (returned " HEX32 "), parameters:"
+              "\nhSession = " HEX32 ", pTemplate = " HEX64 ", ulCount = %lu"
+              ", phObject = " HEX64, ret, hSession, (uintptr_t)pTemplate,
+              ulCount, (uintptr_t)phObject);
+    return ret;
 }
 
 DECLARE_DECORATOR(CK_RV, C_GetAttributeValue,
@@ -83,17 +83,16 @@ DECLARE_DECORATOR(CK_RV, C_GetAttributeValue,
   CK_ATTRIBUTE_PTR pTemplate,
   CK_ULONG ulCount
 ) {
-    dbg_trace("Forwarding to original function, parameters:"
-              "\n   hSession = " HEX32
-              "\n    hObject = %lu"
-              "\n  pTemplate = " HEX64
-              "\n    ulCount = %lu",
-              hSession, hObject, (uintptr_t)pTemplate, ulCount);
-    return ORIGINAL(C_GetAttributeValue)(hSession, hObject, pTemplate, ulCount);
+    CK_RV ret = ORIGINAL(C_GetAttributeValue)(hSession, hObject,
+                                              pTemplate, ulCount);
+    dbg_trace("Forwarded to original function (returned " HEX32 "), parameters:"
+              "\nhSession = " HEX32 ", hObject = %lu, pTemplate = " HEX64
+              ", ulCount = %lu", ret, hSession, hObject, (uintptr_t)pTemplate,
+              ulCount);
+    return ret;
 }
 
 #pragma GCC visibility pop
-
 
 /* ****************************************************************************
  * Exported/Public functions
@@ -105,6 +104,9 @@ DECLARE_DECORATOR(CK_RV, FC_GetInterface,
   CK_INTERFACE_PTR_PTR ppInterface,
   CK_FLAGS flags
 ) {
+    dbg_trace("Parameters:\npInterfaceName = \"%s\", pVersion = " HEX64
+              ", ppInterface = " HEX64 ", flags = %lu", pInterfaceName,
+              (uintptr_t)pVersion, (uintptr_t)ppInterface, flags);
     CK_RV ret = ORIGINAL(FC_GetInterface)(pInterfaceName, pVersion,
                                           ppInterface, flags);
     if (ret == CKR_OK) {
@@ -127,6 +129,7 @@ DECLARE_DECORATOR(CK_RV, FC_GetInterface,
 DECLARE_DECORATOR(CK_RV, FC_GetFunctionList,
   CK_FUNCTION_LIST_PTR_PTR ppFunctionList
 ) {
+    dbg_trace("Parameters: ppFunctionList = " HEX64, (uintptr_t)ppFunctionList);
     CK_RV ret = ORIGINAL(FC_GetFunctionList)(ppFunctionList);
     if (ret == CKR_OK) {
         DECORATE_FUNCTION_LIST(C_CreateObject, *ppFunctionList);
