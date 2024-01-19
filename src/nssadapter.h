@@ -18,13 +18,14 @@
   // #define _ansi_(text, ansi_attrs)    text
   #define _ansi_(text, ansi_attrs)    "\033[" #ansi_attrs "m" text "\033[m"
 
-  #define dbg_trace(format, ...) do {                                          \
+  #define dbg_trace(...) do {                                                  \
       char dt[24]; struct timeval tv; gettimeofday(&tv, NULL);                 \
       strftime(dt, sizeof(dt), "%F %T", gmtime(&tv.tv_sec));                   \
       fprintf(stderr, _ansi_("%s.%06ld UTC", 1;36) " \u2014 "                  \
               _ansi_("%s", 3;32) _ansi_(":", 3) _ansi_("%d", 3;35)             \
-              _ansi_(" in ", 3) _ansi_("%s()", 3;33) " \u2014 " format "\n",   \
-              dt, tv.tv_usec, __FILE__, __LINE__, __func__, ##__VA_ARGS__);    \
+              _ansi_(" in ", 3) _ansi_("%s()", 3;33) " \u2014 ",               \
+              dt, tv.tv_usec, __FILE__, __LINE__, __func__);                   \
+      fprintf(stderr, ##__VA_ARGS__); fputc('\n', stderr); fflush(stderr);     \
   } while(0)
 
   #define HEX32 "0x%08lx"
