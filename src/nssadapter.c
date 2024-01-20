@@ -2,6 +2,7 @@
 
 #include "nssadapter.h"
 #include "decorator.h"
+#include "p11_util.h"
 #include <stdint.h>
 #include <nss3/pkcs11.h>
 
@@ -37,6 +38,35 @@ DECLARE_DECORATOR(CK_RV, C_GetAttributeValue,
               "\nhSession = " HEX32 ", hObject = %lu, pTemplate = " HEX64
               ", ulCount = %lu", ret, hSession, hObject, (uintptr_t)pTemplate,
               ulCount);
+    if (ret == CKR_OK && ulCount >= 3) {
+        CK_BBOOL* token = NULL;
+        CK_BBOOL* sensitive = NULL;
+        CK_BBOOL* extractable = NULL;
+        FOREACH_ATTRIBUTE_START(attribute)
+            getBBoolAttr(attribute, CKA_TOKEN, &token);
+            getBBoolAttr(attribute, CKA_SENSITIVE, &sensitive);
+            getBBoolAttr(attribute, CKA_EXTRACTABLE, &extractable);
+            if (// for token keys, the exporter doesn't work:
+                (token != NULL && *token == CK_TRUE) ||
+                // for non-sensitive keys, the exporter isn't necessary:
+                (sensitive != NULL && *sensitive == CK_FALSE) ||
+                // for non-extractable keys, the exporter doesn't work:
+                (extractable != NULL && *extractable == CK_FALSE)) {
+                break;
+            }
+            if (token != NULL && sensitive != NULL && extractable != NULL) {
+                GET_IS_DH_KEY(hSession, hObject, isDHKey);
+                if (isDHKey == CK_FALSE) {
+                    // non-token, sensitive and extractable key
+                    dbg_trace("Forcing extractable key to be non-sensitive, "
+                              "to prevent an opaque Java key object, which "
+                              "does not get certain attributes");
+                    *sensitive = CK_FALSE;
+                }
+                break;
+            }
+        FOREACH_ATTRIBUTE_END
+    }
     return ret;
 }
 
