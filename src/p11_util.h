@@ -46,4 +46,12 @@ static inline void getBBoolAttr(
     }
 }
 
+static inline CK_BBOOL isUnavailableInformation(CK_ATTRIBUTE_PTR attr) {
+    if (attr != NULL && attr->ulValueLen == CK_UNAVAILABLE_INFORMATION) {
+        return CK_TRUE;
+    } else {
+        return CK_FALSE;
+    }
+}
+
 #endif // P11_UTIL_H

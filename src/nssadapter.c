@@ -66,6 +66,13 @@ DECLARE_DECORATOR(CK_RV, C_GetAttributeValue,
                 break;
             }
         FOREACH_ATTRIBUTE_END
+    } else if (ret == CKR_ATTRIBUTE_SENSITIVE) {
+        FOREACH_ATTRIBUTE_START(attribute)
+            if (isUnavailableInformation(attribute) == CK_TRUE) {
+                dbg_trace("TODO: exportKey();");  // TODO: exportKey();
+                break;
+            }
+        FOREACH_ATTRIBUTE_END
     }
     return ret;
 }
