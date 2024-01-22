@@ -46,18 +46,21 @@ DECLARE_DECORATOR(CK_RV, C_GetAttributeValue,
             getBBoolAttr(attribute, CKA_TOKEN, &token);
             getBBoolAttr(attribute, CKA_SENSITIVE, &sensitive);
             getBBoolAttr(attribute, CKA_EXTRACTABLE, &extractable);
-            if (// for token keys, the exporter doesn't work:
-                (token != NULL && *token == CK_TRUE) ||
-                // for non-sensitive keys, the exporter isn't necessary:
+            if (token != NULL && *token == CK_TRUE) {
+                dbg_trace("Without an NSS DB, CKA_TOKEN should always be "
+                          "CK_FALSE");
+                return CKR_GENERAL_ERROR;
+            }
+            if (// For non-sensitive keys, the exporter isn't necessary:
                 (sensitive != NULL && *sensitive == CK_FALSE) ||
-                // for non-extractable keys, the exporter doesn't work:
+                // For non-extractable keys, the exporter doesn't work:
                 (extractable != NULL && *extractable == CK_FALSE)) {
                 break;
             }
             if (token != NULL && sensitive != NULL && extractable != NULL) {
-                GET_IS_DH_KEY(hSession, hObject, isDHKey);
-                if (isDHKey == CK_FALSE) {
-                    // non-token, sensitive and extractable key
+                // Non-token, sensitive and extractable key:
+                if (!IS_KEY_TYPE(CKO_PRIVATE_KEY, CKK_DH)) {
+                    // See OPENJDK-824 for reasons behind skipping DH keys
                     dbg_trace("Forcing extractable key to be non-sensitive, "
                               "to prevent an opaque Java key object, which "
                               "does not get certain attributes");
@@ -68,7 +71,7 @@ DECLARE_DECORATOR(CK_RV, C_GetAttributeValue,
         FOREACH_ATTRIBUTE_END
     } else if (ret == CKR_ATTRIBUTE_SENSITIVE) {
         FOREACH_ATTRIBUTE_START(attribute)
-            if (isUnavailableInformation(attribute) == CK_TRUE) {
+            if (isUnavailableInformation(attribute)) {
                 dbg_trace("TODO: exportKey();");  // TODO: exportKey();
                 break;
             }
