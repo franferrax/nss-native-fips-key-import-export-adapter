@@ -21,10 +21,10 @@ CK_RV C_CreateObject(
   CK_OBJECT_HANDLE_PTR phObject
 ) {
     CK_RV ret = o.C_CreateObject(hSession, pTemplate, ulCount, phObject);
-    dbg_trace("Forwarded to original function (returned " HEX32 "), parameters:"
-              "\nhSession = " HEX32 ", pTemplate = " HEX64 ", ulCount = %lu"
-              ", phObject = " HEX64, ret, hSession, (uintptr_t)pTemplate,
-              ulCount, (uintptr_t)phObject);
+    dbg_trace("Forwarded to original function (returned " GREPABLE(CKR) "), "
+              "parameters:\nhSession = " HEX32 ", pTemplate = " HEX64
+              ", ulCount = %lu, phObject = " HEX64, ret, hSession,
+              (uintptr_t)pTemplate, ulCount, (uintptr_t)phObject);
     return ret;
 }
 
@@ -35,10 +35,10 @@ CK_RV C_GetAttributeValue(
   CK_ULONG ulCount
 ) {
     CK_RV ret = o.C_GetAttributeValue(hSession, hObject, pTemplate, ulCount);
-    dbg_trace("Forwarded to original function (returned " HEX32 "), parameters:"
-              "\nhSession = " HEX32 ", hObject = %lu, pTemplate = " HEX64
-              ", ulCount = %lu", ret, hSession, hObject, (uintptr_t)pTemplate,
-              ulCount);
+    dbg_trace("Forwarded to original function (returned " GREPABLE(CKR) "), "
+              "parameters:\nhSession = " HEX32 ", hObject = %lu, pTemplate = "
+              HEX64 ", ulCount = %lu", ret, hSession, hObject,
+              (uintptr_t)pTemplate, ulCount);
     if (ret == CKR_OK && ulCount >= 3) {
         CK_BBOOL* token = NULL;
         CK_BBOOL* sensitive = NULL;
