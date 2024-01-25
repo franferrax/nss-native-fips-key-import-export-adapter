@@ -3,7 +3,13 @@
 #ifndef P11_UTIL_H
 #define P11_UTIL_H
 
+#include "original_funcs.h"
 #include <nss3/pkcs11.h>
+
+// Define a function having its NSS FIPS prototype (FC_... proto + C_... func)
+#define WITH_FIPS_PROTOTYPE(ret_type, name, ...)                               \
+    ret_type F ## name(__VA_ARGS__);                                           \
+    ret_type name(__VA_ARGS__)
 
 // (pTemplate, ulCount) attributes iterator, with automatic debug traces
 #define FOREACH_ATTRIBUTE_START(attr)                                          \
@@ -18,14 +24,10 @@
 
 #define FOREACH_ATTRIBUTE_END }
 
-#define IS_KEY_TYPE(expectedClass, expectedType)                               \
-    isKeyType(hSession, hObject, ORIGINAL(C_GetAttributeValue),                \
-              expectedClass, expectedType)
-
 static inline CK_BBOOL isKeyType(
+  original_funcs_t *o,
   CK_SESSION_HANDLE hSession,
   CK_OBJECT_HANDLE hObject,
-  CK_C_GetAttributeValue C_GetAttributeValue,
   CK_OBJECT_CLASS expectedClass,
   CK_KEY_TYPE expectedType
 ) {
@@ -35,8 +37,8 @@ static inline CK_BBOOL isKeyType(
         { .type=CKA_CLASS,    .pValue=&kClass, .ulValueLen=sizeof(kClass) },
         { .type=CKA_KEY_TYPE, .pValue=&kType,  .ulValueLen=sizeof(kType)  },
     };
-    CK_RV ret = C_GetAttributeValue(hSession, hObject, attrs,
-                                    sizeof(attrs) / sizeof(CK_ATTRIBUTE));
+    CK_RV ret = o->C_GetAttributeValue(hSession, hObject, attrs,
+                                       sizeof(attrs) / sizeof(CK_ATTRIBUTE));
     dbg_trace("kClass = " HEX32 " (expected: " HEX32 "), kType = " HEX32
               " (expected: " HEX32 ")", kClass, expectedClass, kType,
               expectedType);

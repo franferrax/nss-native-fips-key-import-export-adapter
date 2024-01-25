@@ -17,7 +17,6 @@
   // To disable colors, change _ansi_ to:
   // #define _ansi_(text, ansi_attrs)    text
   #define _ansi_(text, ansi_attrs)    "\033[" #ansi_attrs "m" text "\033[m"
-  #define WILL_CRASH           _ansi_("the program WILL CRASH!", 1;4;5;31)
 
   #define dbg_trace(...) do {                                                  \
       char dt[24]; struct timeval tv; gettimeofday(&tv, NULL);                 \
