@@ -3,7 +3,6 @@
 #ifndef P11_UTIL_H
 #define P11_UTIL_H
 
-#include "original_funcs.h"
 #include <nss3/pkcs11.h>
 
 // Define a function having its NSS FIPS prototype (FC_... proto + C_... func)
@@ -30,7 +29,7 @@
 #define FOREACH_ATTRIBUTE_END }
 
 static inline CK_BBOOL isKeyType(
-  original_funcs_t *o,
+  CK_FUNCTION_LIST_PTR o,
   CK_SESSION_HANDLE hSession,
   CK_OBJECT_HANDLE hObject,
   CK_OBJECT_CLASS expectedClass,

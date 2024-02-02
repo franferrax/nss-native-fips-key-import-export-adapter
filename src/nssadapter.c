@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later WITH Classpath-exception-2.0
 
 #include "nssadapter.h"
-#include "original_funcs.h"
 #include "p11_util.h"
+#include <memory.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <nss3/pkcs11.h>
@@ -12,7 +12,19 @@
  * ****************************************************************************/
 #pragma GCC visibility push(hidden)
 
-static original_funcs_t o = { 0 };
+// Saved non-decorated original function list from NSS, for this wrapper's use.
+// NOTE: the PKCS #11 v3.0 standard states 'CK_FUNCTION_LIST_3_0 is a structure
+// which contains the same function pointers as in CK_FUNCTION_LIST and
+// additional functions added to the end of the structure that were defined in
+// Cryptoki version 3.0'. This implies that we can safely use CK_FUNCTION_LIST
+// regardless of the version, as long as it contains all the functions we need.
+CK_FUNCTION_LIST_PTR o = NULL;
+
+// Copy for the decorated versions of the CK_INTERFACE and CK_FUNCTION_LIST/_3_0
+// structures. We use CK_FUNCTION_LIST_3_0 since it has enough space to hold all
+// the CK_FUNCTION_LIST data, in runtime, one or the other can be present.
+CK_INTERFACE decoratedInterface = { 0 } ;
+CK_FUNCTION_LIST_3_0 decoratedFunctionList = { 0 };
 
 CK_RV C_CreateObject(
   CK_SESSION_HANDLE hSession,
@@ -20,7 +32,7 @@ CK_RV C_CreateObject(
   CK_ULONG ulCount,
   CK_OBJECT_HANDLE_PTR phObject
 ) {
-    CK_RV ret = o.C_CreateObject(hSession, pTemplate, ulCount, phObject);
+    CK_RV ret = o->C_CreateObject(hSession, pTemplate, ulCount, phObject);
     dbg_trace("Forwarded to original function (returned " GREPABLE(CKR) "), "
               "parameters:\nhSession = " HEX32 ", pTemplate = " HEX64
               ", ulCount = %lu, phObject = " HEX64, ret, hSession,
@@ -34,7 +46,7 @@ CK_RV C_GetAttributeValue(
   CK_ATTRIBUTE_PTR pTemplate,
   CK_ULONG ulCount
 ) {
-    CK_RV ret = o.C_GetAttributeValue(hSession, hObject, pTemplate, ulCount);
+    CK_RV ret = o->C_GetAttributeValue(hSession, hObject, pTemplate, ulCount);
     dbg_trace("Forwarded to original function (returned " GREPABLE(CKR) "), "
               "parameters:\nhSession = " HEX32 ", hObject = %lu, pTemplate = "
               HEX64 ", ulCount = %lu", ret, hSession, hObject,
@@ -60,8 +72,7 @@ CK_RV C_GetAttributeValue(
             }
             if (token != NULL && sensitive != NULL && extractable != NULL) {
                 // Non-token, sensitive and extractable key:
-                if (!isKeyType(&o, hSession, hObject,
-                               CKO_PRIVATE_KEY, CKK_DH)) {
+                if (!isKeyType(o, hSession, hObject, CKO_PRIVATE_KEY, CKK_DH)) {
                     // See OPENJDK-824 for reasons behind skipping DH keys
                     dbg_trace("Forcing extractable key to be non-sensitive, "
                               "to prevent an opaque Java key object, which "
@@ -97,21 +108,35 @@ WITH_FIPS_PROTOTYPE(CK_RV, C_GetInterface,
     dbg_trace("Parameters:\npInterfaceName = \"%s\", pVersion = " HEX64
               ", ppInterface = " HEX64 ", flags = %lu", pInterfaceName,
               (uintptr_t)pVersion, (uintptr_t)ppInterface, flags);
+    if (pInterfaceName != NULL) {
+        dbg_trace("Only the default interface is supported by this adapter");
+        return CKR_GENERAL_ERROR;
+    }
+    if (decoratedInterface.pFunctionList == &decoratedFunctionList) {
+        // Already initialized
+        *ppInterface = &decoratedInterface;
+        return CKR_OK;
+    }
+
     CK_RV ret = FC_GetInterface(pInterfaceName, pVersion, ppInterface, flags);
     if (ret == CKR_OK) {
-        // NOTE: the PKCS #11 v3.0 standard states 'CK_FUNCTION_LIST_3_0
-        // is a structure which contains the same function pointers as in
-        // CK_FUNCTION_LIST and additional functions added to the end of
-        // the structure that were defined in Cryptoki version 3.0'. This
-        // implies that we can safely use CK_FUNCTION_LIST regardless of
-        // the version, as long as it contains all the functions we need
-        // to decorate, which is our case.
-        CK_FUNCTION_LIST_PTR pFunctionList = (*ppInterface)->pFunctionList;
-        #define SAVE_AND_DECORATE_P11_FUNCTIONS
-        #include "original_funcs.h"
-        #undef SAVE_AND_DECORATE_P11_FUNCTIONS
-        dbg_trace("NSS PKCS #11 v%d.%d, software token successfully adapted",
-                  pFunctionList->version.major, pFunctionList->version.minor);
+        // Save non-decorated original function list, for this wrapper's use
+        o = (*ppInterface)->pFunctionList;
+
+        // Clone returned structures
+        memcpy(&decoratedInterface, *ppInterface, sizeof(decoratedInterface));
+        memcpy(&decoratedFunctionList, o, o->version.major == 3 ?
+               sizeof(CK_FUNCTION_LIST_3_0) : sizeof(CK_FUNCTION_LIST));
+
+        // Decorate functions
+        decoratedFunctionList.C_CreateObject = C_CreateObject;
+        decoratedFunctionList.C_GetAttributeValue = C_GetAttributeValue;
+
+        // Update pointers
+        decoratedInterface.pFunctionList = &decoratedFunctionList;
+        *ppInterface = &decoratedInterface;
+        dbg_trace("NSS PKCS #11 v%d.%d, software token successfully "
+                  "adapted", o->version.major, o->version.minor);
     }
     return ret;
 }
@@ -119,16 +144,10 @@ WITH_FIPS_PROTOTYPE(CK_RV, C_GetInterface,
 WITH_FIPS_PROTOTYPE(CK_RV, C_GetFunctionList,
   CK_FUNCTION_LIST_PTR_PTR ppFunctionList
 ) {
-    dbg_trace("Parameters: ppFunctionList = " HEX64, (uintptr_t)ppFunctionList);
-    CK_RV ret = FC_GetFunctionList(ppFunctionList);
-    if (ret == CKR_OK) {
-        CK_FUNCTION_LIST_PTR pFunctionList = *ppFunctionList;
-        #define SAVE_AND_DECORATE_P11_FUNCTIONS
-        #include "original_funcs.h"
-        #undef SAVE_AND_DECORATE_P11_FUNCTIONS
-        dbg_trace("NSS PKCS #11, software token successfully adapted");
-    }
-    return ret;
+    dbg_trace("Only the C_GetInterface() API is supported by this adapter "
+              "(ppFunctionList = " HEX64 ")", (uintptr_t)ppFunctionList);
+    *ppFunctionList = NULL;
+    return CKR_GENERAL_ERROR;
 }
 
 /* ****************************************************************************
