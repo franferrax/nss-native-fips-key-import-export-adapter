@@ -26,6 +26,18 @@ CK_FUNCTION_LIST_PTR o = NULL;
 CK_INTERFACE decoratedInterface = { 0 } ;
 CK_FUNCTION_LIST_3_0 decoratedFunctionList = { 0 };
 
+// Import/Export session, key, initialization vector (IV) and mechanism. The
+// IV was randomly generated once: there is no point in trying to generate it
+// at run time, since the encryption is temporary, and we are receiving or
+// going to return the sensitive attributes in plain.
+static CK_SESSION_HANDLE ieKeySession = CK_INVALID_HANDLE;
+static CK_OBJECT_HANDLE ieKey = CK_INVALID_HANDLE;
+static CK_BYTE iv[] = { 0xa1, 0xe9, 0xe1, 0x95, 0xbf, 0x11, 0x6c, 0xca,
+                        0xef, 0xa5, 0x56, 0x5e, 0xdd, 0xfc, 0xdc, 0x8c  };
+static CK_MECHANISM ieKeyMech = { .mechanism = CKM_AES_CBC_PAD,
+                                  .pParameter = &iv,
+                                  .ulParameterLen = sizeof(iv) };
+
 CK_RV C_CreateObject(
   CK_SESSION_HANDLE hSession,
   CK_ATTRIBUTE_PTR pTemplate,
@@ -93,6 +105,66 @@ CK_RV C_GetAttributeValue(
     return ret;
 }
 
+CK_RV initializeImporterExporter() {
+    if (ieKey != CK_INVALID_HANDLE) {
+        // Already initialized
+        return CKR_OK;
+    }
+
+    // NSS realizes that no DB was configured and FIPS level is 2 after the
+    // C_GetTokenInfo() call, and stops requiring login on each operation
+    CK_TOKEN_INFO info;
+    CK_RV ret = o->C_GetTokenInfo(FIPS_SLOT_ID, &info);
+    dbg_trace("Called C_GetTokenInfo() to remove the login requirement "
+              "(returned " GREPABLE(CKR) ")", ret);
+    if (ret != CKR_OK) {
+        return ret;
+    }
+
+    ret = o->C_OpenSession(FIPS_SLOT_ID, CKF_SERIAL_SESSION, NULL, NULL,
+                           &ieKeySession);
+    dbg_trace("Called C_OpenSession() to create the session for the "
+              "import/export key (returned " GREPABLE(CKR) ")", ret);
+    if (ret != CKR_OK) {
+        return ret;
+    }
+
+    CK_OBJECT_CLASS kClass = CKO_SECRET_KEY;
+    CK_ULONG kLen = 256 >> 3;
+    CK_MECHANISM mechanisms[] = {
+        { .mechanism=CKM_AES_KEY_GEN, .pParameter=NULL, .ulParameterLen=0 },
+    };
+    CK_ATTRIBUTE attributes[] = {
+        { .type=CKA_CLASS,     .pValue=&kClass, .ulValueLen=sizeof(kClass) },
+        { .type=CKA_VALUE_LEN, .pValue=&kLen,   .ulValueLen=sizeof(kLen)   },
+    };
+    ret = o->C_GenerateKey(ieKeySession, mechanisms, attributes,
+                           sizeof(attributes) / sizeof(CK_ATTRIBUTE), &ieKey);
+    dbg_trace("Called C_GenerateKey() to create the import/export key "
+              "(returned " GREPABLE(CKR) ")", ret);
+    return ret;
+}
+
+CK_RV C_Initialize(
+  CK_VOID_PTR pInitArgs
+) {
+    CK_RV ret = o->C_Initialize(pInitArgs);
+    dbg_trace("Forwarded to original function (returned " GREPABLE(CKR) "), "
+              "pInitArgs = " HEX64, ret, (uintptr_t)pInitArgs);
+    if (ret == CKR_OK) {
+        // After loading this native library, the SunPKCS11 constructor calls
+        // PKCS11::getInstance(), which is a synchronized method. This method
+        // invokes C_Initialize(), so by calling initializeImporterExporter()
+        // at this point (inside the C_Initialize() implementation), we are
+        // guaranteed that the importer/exporter initialization will not be
+        // concurrently executed.
+        if (initializeImporterExporter(o) != CKR_OK) {
+            ret = CKR_GENERAL_ERROR;
+        }
+    }
+    return ret;
+}
+
 #pragma GCC visibility pop
 
 /* ****************************************************************************
@@ -131,6 +203,7 @@ WITH_FIPS_PROTOTYPE(CK_RV, C_GetInterface,
         // Decorate functions
         decoratedFunctionList.C_CreateObject = C_CreateObject;
         decoratedFunctionList.C_GetAttributeValue = C_GetAttributeValue;
+        decoratedFunctionList.C_Initialize = C_Initialize;
 
         // Update pointers
         decoratedInterface.pFunctionList = &decoratedFunctionList;
@@ -151,13 +224,12 @@ WITH_FIPS_PROTOTYPE(CK_RV, C_GetFunctionList,
 }
 
 /* ****************************************************************************
- * Library constructor and destructor
+ * Library constructor/destructor
  * ****************************************************************************/
 
-void CONSTRUCTOR_FUNCTION library_constructor(void) {
-    // TODO: create wrapper keys for import/export workaround
-}
-
-void DESTRUCTOR_FUNCTION library_destructor(void) {
-    // TODO: destroy wrapper keys
+static void DESTRUCTOR_FUNCTION library_destructor(void) {
+    // Destroy import/export key, if created
+    if (ieKeySession != CK_INVALID_HANDLE) {
+        o->C_CloseSession(ieKeySession);
+    }
 }

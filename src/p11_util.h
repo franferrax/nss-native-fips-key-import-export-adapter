@@ -5,6 +5,8 @@
 
 #include <nss3/pkcs11.h>
 
+#define FIPS_SLOT_ID 3
+
 // Define a function having its NSS FIPS prototype (FC_... proto + C_... func)
 #define WITH_FIPS_PROTOTYPE(ret_type, name, ...)                               \
     ret_type F ## name(__VA_ARGS__);                                           \
