@@ -12,7 +12,7 @@ INCLUDES      = /usr/include/nspr4
 CFLAGS        = -shared -fPIC $(addprefix -l,$(LIBS)) $(addprefix -I,$(INCLUDES)) \
                 -Wpedantic -Wall -Wextra -Wconversion -Werror
 REL_CFLAGS    = -O3
-DBG_CFLAGS    = -O0 -DDEBUG
+DBG_CFLAGS    = -O0 -g -DDEBUG
 
 
 #
