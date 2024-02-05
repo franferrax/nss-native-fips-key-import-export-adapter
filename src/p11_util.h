@@ -17,18 +17,18 @@
 // to know the defined value
 #define GREPABLE(prefix) #prefix "_.*" HEX32
 
-// (pTemplate, ulCount) attributes iterator, with automatic debug traces
-#define FOREACH_ATTRIBUTE_START(attr)                                          \
-    CK_ATTRIBUTE_PTR attr = NULL;                                              \
-    for (CK_ULONG i = 0; i < ulCount; i++) {                                   \
-        attr = &pTemplate[i];                                                  \
-        dbg_trace(attr == NULL ? #attr ": NULL" : #attr ": type = "            \
-                  GREPABLE(CKA) ", pValue = " HEX64 ", ulValueLen = %lu",      \
-                  attr == NULL ? 0 : attr->type,                               \
-                  attr == NULL ? 0 : (uintptr_t)attr->pValue,                  \
-                  attr == NULL ? 0 : attr->ulValueLen);                        \
-
-#define FOREACH_ATTRIBUTE_END }
+#define dbg_trace_attr(attr) do {                                              \
+    dbg_trace((attr) == NULL ? "ATTR: NULL" : (                                \
+                (attr)->ulValueLen == CK_UNAVAILABLE_INFORMATION ?             \
+                  "ATTR: type = " GREPABLE(CKA) ", pValue = " HEX64            \
+                  ", ulValueLen = CK_UNAVAILABLE_INFORMATION" :                \
+                  "ATTR: type = " GREPABLE(CKA) ", pValue = " HEX64            \
+                  ", ulValueLen = %lu"                                         \
+                ),                                                             \
+              (attr) == NULL ? 0 : (attr)->type,                               \
+              (attr) == NULL ? 0 : (uintptr_t)(attr)->pValue,                  \
+              (attr) == NULL ? 0 : (attr)->ulValueLen);                        \
+} while(0)
 
 static inline CK_BBOOL isKeyType(
   CK_FUNCTION_LIST_PTR o,

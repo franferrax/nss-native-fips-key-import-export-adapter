@@ -64,14 +64,19 @@ CK_RV C_GetAttributeValue(
               "parameters:\nhSession = " HEX32 ", hObject = %lu, pTemplate = "
               HEX64 ", ulCount = %lu", ret, hSession, hObject,
               (uintptr_t)pTemplate, ulCount);
+    if (dbg_is_enabled()) {
+        for (CK_ULONG i = 0; i < ulCount; i++) {
+            dbg_trace_attr(&pTemplate[i]);
+        }
+    }
     if (ret == CKR_OK && ulCount >= 3) {
         CK_BBOOL* token = NULL;
         CK_BBOOL* sensitive = NULL;
         CK_BBOOL* extractable = NULL;
-        FOREACH_ATTRIBUTE_START(attribute)
-            getBBoolAttr(attribute, CKA_TOKEN, &token);
-            getBBoolAttr(attribute, CKA_SENSITIVE, &sensitive);
-            getBBoolAttr(attribute, CKA_EXTRACTABLE, &extractable);
+        for (CK_ULONG i = 0; i < ulCount; i++) {
+            getBBoolAttr(&pTemplate[i], CKA_TOKEN, &token);
+            getBBoolAttr(&pTemplate[i], CKA_SENSITIVE, &sensitive);
+            getBBoolAttr(&pTemplate[i], CKA_EXTRACTABLE, &extractable);
             if (token != NULL && *token == CK_TRUE) {
                 dbg_trace("Without an NSS DB, CKA_TOKEN should always be "
                           "CK_FALSE");
@@ -94,14 +99,14 @@ CK_RV C_GetAttributeValue(
                 }
                 break;
             }
-        FOREACH_ATTRIBUTE_END
+        }
     } else if (ret == CKR_ATTRIBUTE_SENSITIVE) {
-        FOREACH_ATTRIBUTE_START(attribute)
-            if (isUnavailableInformation(attribute)) {
+        for (CK_ULONG i = 0; i < ulCount; i++) {
+            if (isUnavailableInformation(&pTemplate[i])) {
                 dbg_trace("TODO: exportKey();");  // TODO: exportKey();
                 break;
             }
-        FOREACH_ATTRIBUTE_END
+        }
     }
     return ret;
 }
