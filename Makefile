@@ -12,7 +12,7 @@ INCLUDES      = /usr/include/nspr4
 CFLAGS        = -shared -fPIC $(addprefix -l,$(LIBS)) $(addprefix -I,$(INCLUDES)) \
                 -Wpedantic -Wall -Wextra -Wconversion -Werror
 REL_CFLAGS    = -O3
-DBG_CFLAGS    = -O0 -g -DDEBUG
+DBG_CFLAGS    = -Wno-error=unused-variable -Wno-error=unused-parameter -O0 -g -DDEBUG
 
 
 #
