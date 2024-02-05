@@ -30,6 +30,45 @@
               (attr) == NULL ? 0 : (attr)->ulValueLen);                        \
 } while(0)
 
+// Handle the convention described in PKCS #11 Section 5.2 on producing output
+#define ALLOCATION_IDIOM(api, pData, dataLen, ...) do {                        \
+    ret = api(__VA_ARGS__, NULL, &dataLen);                                    \
+    if (ret != CKR_OK) {                                                       \
+        dbg_trace(#api "() has failed with " GREPABLE(CKR), ret);              \
+        goto end;                                                              \
+    }                                                                          \
+    pData = malloc(dataLen);                                                   \
+    if (pData == NULL) {                                                       \
+        dbg_trace("Ran out of memory for the " #api "() call");                \
+        goto end;                                                              \
+    }                                                                          \
+    ret = api(__VA_ARGS__, pData, &dataLen);                                   \
+} while(0)
+
+static inline CK_RV getKeyType(
+  CK_FUNCTION_LIST_PTR o,
+  CK_SESSION_HANDLE hSession,
+  CK_OBJECT_HANDLE hObject,
+  CK_OBJECT_CLASS *pKeyClass,
+  CK_KEY_TYPE *pKeyType
+) {
+    CK_ATTRIBUTE attrs[] = {
+        { .type=CKA_CLASS,    .pValue=pKeyClass,
+          .ulValueLen=sizeof(CK_OBJECT_CLASS),   },
+        { .type=CKA_KEY_TYPE, .pValue=pKeyType,
+          .ulValueLen=sizeof(CK_KEY_TYPE),       },
+    };
+    CK_RV ret = o->C_GetAttributeValue(hSession, hObject, attrs,
+                                       sizeof(attrs) / sizeof(CK_ATTRIBUTE));
+    if (ret == CKR_OK) {
+        dbg_trace("key ID = %lu, key class = " GREPABLE(CKO) ", key type = "
+                  GREPABLE(CKK), hObject, *pKeyClass, *pKeyType);
+    } else {
+        dbg_trace("C_GetAttributeValue call failed with " GREPABLE(CKR), ret);
+    }
+    return ret;
+}
+
 static inline CK_BBOOL isKeyType(
   CK_FUNCTION_LIST_PTR o,
   CK_SESSION_HANDLE hSession,
@@ -39,16 +78,8 @@ static inline CK_BBOOL isKeyType(
 ) {
     CK_OBJECT_CLASS kClass;
     CK_KEY_TYPE kType;
-    CK_ATTRIBUTE attrs[] = {
-        { .type=CKA_CLASS,    .pValue=&kClass, .ulValueLen=sizeof(kClass) },
-        { .type=CKA_KEY_TYPE, .pValue=&kType,  .ulValueLen=sizeof(kType)  },
-    };
-    CK_RV ret = o->C_GetAttributeValue(hSession, hObject, attrs,
-                                       sizeof(attrs) / sizeof(CK_ATTRIBUTE));
-    dbg_trace("kClass = " GREPABLE(CKO) " (expected: " GREPABLE(CKO) "), "
-              "kType = " GREPABLE(CKK) " (expected: " GREPABLE(CKK) ")",
-              kClass, expectedClass, kType, expectedType);
-    return ret == CKR_OK && kClass == expectedClass && kType == expectedType;
+    return getKeyType(o, hSession, hObject, &kClass, &kType) == CKR_OK &&
+           kClass == expectedClass && kType == expectedType;
 }
 
 static inline void getBBoolAttr(
