@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later WITH Classpath-exception-2.0
 
 #include "nssadapter.h"
+#include "dbg_trace.h"
 #include "p11_util.h"
 #include <memory.h>
 #include <stdbool.h>
@@ -226,6 +227,10 @@ WITH_FIPS_PROTOTYPE(CK_RV, C_GetFunctionList,
 /* ****************************************************************************
  * Library constructor/destructor
  * ****************************************************************************/
+
+static void CONSTRUCTOR_FUNCTION library_constructor(void) {
+    dbg_initialize();
+}
 
 static void DESTRUCTOR_FUNCTION library_destructor(void) {
     // Destroy import/export key, if created
