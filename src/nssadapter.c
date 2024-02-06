@@ -10,7 +10,7 @@
 #include <nss3/pkcs11.h>
 
 /* ****************************************************************************
- * Internal/Private functions
+ * Common functionality
  * ****************************************************************************/
 #pragma GCC visibility push(hidden)
 
@@ -73,6 +73,28 @@ static CK_ATTRIBUTE_PTR getSensitiveCachedAttr(CK_ATTRIBUTE_TYPE type) {
             return NULL;
      }
 }
+
+/* ****************************************************************************
+ * Importer
+ * ****************************************************************************/
+
+CK_RV C_CreateObject(
+  CK_SESSION_HANDLE hSession,
+  CK_ATTRIBUTE_PTR pTemplate,
+  CK_ULONG ulCount,
+  CK_OBJECT_HANDLE_PTR phObject
+) {
+    CK_RV ret = o->C_CreateObject(hSession, pTemplate, ulCount, phObject);
+    dbg_trace("Forwarded to original function (returned " GREPABLE(CKR) "), "
+              "parameters:\nhSession = " HEX32 ", pTemplate = " HEX64
+              ", ulCount = %lu, phObject = " HEX64, ret, hSession,
+              (uintptr_t)pTemplate, ulCount, (uintptr_t)phObject);
+    return ret;
+}
+
+/* ****************************************************************************
+ * Exporter
+ * ****************************************************************************/
 
 static CK_RV exportSecretKey(
   CK_BYTE_PTR *ppEncodedKey,
@@ -207,20 +229,6 @@ end:
     return ret;
 }
 
-CK_RV C_CreateObject(
-  CK_SESSION_HANDLE hSession,
-  CK_ATTRIBUTE_PTR pTemplate,
-  CK_ULONG ulCount,
-  CK_OBJECT_HANDLE_PTR phObject
-) {
-    CK_RV ret = o->C_CreateObject(hSession, pTemplate, ulCount, phObject);
-    dbg_trace("Forwarded to original function (returned " GREPABLE(CKR) "), "
-              "parameters:\nhSession = " HEX32 ", pTemplate = " HEX64
-              ", ulCount = %lu, phObject = " HEX64, ret, hSession,
-              (uintptr_t)pTemplate, ulCount, (uintptr_t)phObject);
-    return ret;
-}
-
 CK_RV C_GetAttributeValue(
   CK_SESSION_HANDLE hSession,
   CK_OBJECT_HANDLE hObject,
@@ -320,6 +328,10 @@ CK_RV C_GetAttributeValue(
     return ret;
 }
 
+/* ****************************************************************************
+ * Initialization
+ * ****************************************************************************/
+
 CK_RV initializeImporterExporter() {
     if (ieKey != CK_INVALID_HANDLE) {
         // Already initialized
@@ -383,7 +395,7 @@ CK_RV C_Initialize(
 #pragma GCC visibility pop
 
 /* ****************************************************************************
- * Exported/Public functions
+ * Exported functions
  * ****************************************************************************/
 
 WITH_FIPS_PROTOTYPE(CK_RV, C_GetInterface,
