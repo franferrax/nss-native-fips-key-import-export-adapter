@@ -9,12 +9,12 @@
 
 #define ansi_attrs(attrs) "\033[" attrs "m"
 
-#define STATUS_ENABLED     (1 << 0)
-#define STATUS_COLOR       (1 << 1)
+#define STATUS_ENABLED    (1 << 0)
+#define STATUS_COLOR      (1 << 1)
 #ifdef DEBUG
-  #define DEFAULT_STATUS   (STATUS_ENABLED | STATUS_COLOR)
+#define DEFAULT_STATUS (STATUS_ENABLED | STATUS_COLOR)
 #else
-  #define DEFAULT_STATUS   0
+#define DEFAULT_STATUS 0
 #endif // DEBUG
 
 static unsigned char dbg_status = 0;
@@ -61,8 +61,10 @@ inline void __dbg_trace_header(const char *file, const unsigned int line,
     }
     gettimeofday(&tv, NULL);
     strftime(dt, sizeof(dt), "%F %T", gmtime(&tv.tv_sec));
-    fprintf(stderr, "%s%s.%06ld UTC%s \u2014 %s%s%s%s:%s%s%d%s %sin%s %s%s()%s "
-            "\u2014 ", b_cyan, dt, tv.tv_usec, ansi_end, i_green, file,
-            ansi_end, italic, ansi_end, i_magenta, line, ansi_end, italic,
-            ansi_end, i_yellow, func, ansi_end);
+    fprintf(stderr,
+            "%s%s.%06ld UTC%s \u2014 %s%s%s%s:%s%s%d%s %sin%s %s%s()%s "
+            "\u2014 ",
+            b_cyan, dt, tv.tv_usec, ansi_end, i_green, file, ansi_end, italic,
+            ansi_end, i_magenta, line, ansi_end, italic, ansi_end, i_yellow,
+            func, ansi_end);
 }
