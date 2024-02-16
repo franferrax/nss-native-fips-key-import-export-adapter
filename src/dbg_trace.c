@@ -7,7 +7,7 @@
 #include <sys/time.h>
 #include <time.h>
 
-#define ansi_attrs(attrs) "\033[" #attrs "m"
+#define ansi_attrs(attrs) "\033[" attrs "m"
 
 #define STATUS_ENABLED     (1 << 0)
 #define STATUS_COLOR       (1 << 1)
@@ -51,11 +51,11 @@ inline void __dbg_trace_header(const char *file, const unsigned int line,
 
     if (dbg_status & STATUS_COLOR) {
         ansi_end = ansi_attrs();
-        b_cyan = ansi_attrs(1;36);
-        italic = ansi_attrs(3);
-        i_green = ansi_attrs(3;32);
-        i_magenta = ansi_attrs(3;35);
-        i_yellow = ansi_attrs(3;33);
+        b_cyan = ansi_attrs("1;36");
+        italic = ansi_attrs("3");
+        i_green = ansi_attrs("3;32");
+        i_magenta = ansi_attrs("3;35");
+        i_yellow = ansi_attrs("3;33");
     } else {
         ansi_end = b_cyan = italic = i_green = i_magenta = i_yellow = "";
     }

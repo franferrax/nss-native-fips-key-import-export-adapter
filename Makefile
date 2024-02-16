@@ -14,10 +14,21 @@ CFLAGS        = -shared -fPIC $(addprefix -l,$(LIBS)) $(addprefix -I,$(INCLUDES)
 REL_CFLAGS    = -O3
 DBG_CFLAGS    = -Wno-error=unused-variable -Wno-error=unused-parameter -O0 -g -DDEBUG
 
+# https://clang.llvm.org/docs/ClangFormatStyleOptions.html
+CLANG_FORMAT_STYLE = {                                                         \
+    BasedOnStyle: LLVM,                                                        \
+    IndentWidth: 4,                                                            \
+    AlignArrayOfStructures: Left,                                              \
+    AlignConsecutiveMacros: AcrossEmptyLines,                                  \
+    AllowShortFunctionsOnASingleLine: Inline,                                  \
+    InsertNewlineAtEOF: true,                                                  \
+}
+
 
 #
 # Build
 #
+SRC_FILES = $(wildcard $(SRC_DIR)/*.h) $(wildcard $(SRC_DIR)/*.c)
 ifeq ($(wildcard $(DBG_SENTINEL)),$(DBG_SENTINEL))
   BUILT_MODE = debug
   CLEAN_IF_BUILT_MODE_IS_DEBUG = clean
@@ -46,7 +57,7 @@ clean:                                              ## Remove binaries and artif
 $(BIN_DIR):
 	@mkdir $(BIN_DIR)
 
-$(OUTPUT): $(BIN_DIR) $(wildcard $(SRC_DIR)/*.h) $(wildcard $(SRC_DIR)/*.c)
+$(OUTPUT): $(BIN_DIR) $(SRC_FILES)
 	@$(CREATE_DBG_SENTINEL_IF_NEEDED)
 	$(CC) $(CFLAGS) $(filter %.c, $+) -o $@
 
@@ -54,6 +65,11 @@ $(OUTPUT): $(BIN_DIR) $(wildcard $(SRC_DIR)/*.h) $(wildcard $(SRC_DIR)/*.c)
 #
 # Utilities
 #
+.PHONY: format
+format:                                             ## Automatically format the source code (requires 'clang-format')
+	@clang-format --verbose -i --style='$(CLANG_FORMAT_STYLE)' $(SRC_FILES) || \
+	    echo "In RHEL/Fedora, 'clang-format' is provided by the 'clang-tools-extra' package"
+
 .PHONY: info
 info: $(BUILT_MODE)                                 ## Show built binary information (build mode, linkage and symbols)
 	@echo
