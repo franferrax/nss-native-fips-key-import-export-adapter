@@ -12,7 +12,6 @@
 /* ****************************************************************************
  * Common functionality
  * ****************************************************************************/
-#pragma GCC visibility push(hidden)
 
 // Saved non-decorated original function list from NSS, for this wrapper's use.
 // NOTE: the PKCS #11 v3.0 standard states 'CK_FUNCTION_LIST_3_0 is a structure
@@ -391,8 +390,6 @@ CK_RV C_Initialize(
     }
     return ret;
 }
-
-#pragma GCC visibility pop
 
 /* ****************************************************************************
  * Exported functions

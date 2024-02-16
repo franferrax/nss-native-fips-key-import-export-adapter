@@ -6,5 +6,6 @@
 // Shared library constructor/initializer and destructor/finalizer
 #define CONSTRUCTOR_FUNCTION __attribute__((constructor))
 #define DESTRUCTOR_FUNCTION __attribute__((destructor))
+#define EXPORTED_FUNCTION __attribute__((visibility("default")))
 
 #endif // NSS_ADAPTER_H

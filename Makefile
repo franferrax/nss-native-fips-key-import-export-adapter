@@ -10,7 +10,7 @@ CC            = gcc
 LIBS          = softokn3
 INCLUDES      = /usr/include/nspr4
 CFLAGS        = -shared -fPIC $(addprefix -l,$(LIBS)) $(addprefix -I,$(INCLUDES)) \
-                -Wpedantic -Wall -Wextra -Wconversion -Werror
+                -Wpedantic -Wall -Wextra -Wconversion -Werror -fvisibility=hidden
 REL_CFLAGS    = -O3
 DBG_CFLAGS    = -Wno-error=unused-variable -Wno-error=unused-parameter -O0 -g -DDEBUG
 
