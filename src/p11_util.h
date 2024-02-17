@@ -18,6 +18,25 @@
 #define CKO_FMT             __grep_able(CKO)
 #define CKR_FMT             __grep_able(CKR)
 
+// Get the length of a fixed-size (stack / global) attributes array
+#define attrs_count(attributes) (sizeof(attributes) / sizeof(CK_ATTRIBUTE))
+
+// Handle convention described in PKCS #11 v3.0 Section 5.2 on producing output
+#define p11_allocation_idiom(P11_Func, data, data_len, ...)                    \
+    do {                                                                       \
+        ret = P11_Func(__VA_ARGS__, NULL, &(data_len));                        \
+        if (ret != CKR_OK) {                                                   \
+            dbg_trace(#P11_Func "() has failed with ret = " CKR_FMT, ret);     \
+            goto cleanup;                                                      \
+        }                                                                      \
+        (data) = malloc(data_len);                                             \
+        if ((data) == NULL) {                                                  \
+            dbg_trace("Ran out of memory for the " #P11_Func "() call");       \
+            goto cleanup;                                                      \
+        }                                                                      \
+        ret = P11_Func(__VA_ARGS__, (data), &(data_len));                      \
+    } while (0)
+
 // Log a CK_ATTRIBUTE with all its fields and data
 #define dbg_trace_attr(message, attr)                                          \
     do {                                                                       \
@@ -36,22 +55,6 @@
         }                                                                      \
     } while (0)
 
-// Handle convention described in PKCS #11 v3.0 Section 5.2 on producing output
-#define p11_allocation_idiom(P11_Func, data, data_len, ...)                    \
-    do {                                                                       \
-        ret = P11_Func(__VA_ARGS__, NULL, &(data_len));                        \
-        if (ret != CKR_OK) {                                                   \
-            dbg_trace(#P11_Func "() has failed with ret = " CKR_FMT, ret);     \
-            goto cleanup;                                                      \
-        }                                                                      \
-        (data) = malloc(data_len);                                             \
-        if ((data) == NULL) {                                                  \
-            dbg_trace("Ran out of memory for the " #P11_Func "() call");       \
-            goto cleanup;                                                      \
-        }                                                                      \
-        ret = P11_Func(__VA_ARGS__, (data), &(data_len));                      \
-    } while (0)
-
 static inline bool is_importable_exportable(CK_OBJECT_CLASS key_class,
                                             CK_KEY_TYPE key_type) {
     // NOTE: see OPENJDK-824 for reasons behind skipping DH keys
@@ -68,8 +71,8 @@ static inline bool get_key_type_from_object(CK_SESSION_HANDLE session,
         {CKA_CLASS,    key_class, sizeof(CK_OBJECT_CLASS)},
         {CKA_KEY_TYPE, key_type,  sizeof(CK_KEY_TYPE)    },
     };
-    CK_RV ret = P11.C_GetAttributeValue(
-        session, key_id, attributes, sizeof(attributes) / sizeof(CK_ATTRIBUTE));
+    CK_RV ret = P11.C_GetAttributeValue(session, key_id, attributes,
+                                        attrs_count(attributes));
     if (ret == CKR_OK) {
         dbg_trace("key: id = %lu, class = " CKO_FMT ", type = " CKK_FMT, key_id,
                   *key_class, *key_type);

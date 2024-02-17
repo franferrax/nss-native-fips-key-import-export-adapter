@@ -122,8 +122,7 @@ static CK_RV initialize_importer_exporter() {
         {CKA_VALUE_LEN, &keyLen,   sizeof(keyLen)  },
     };
     ret = P11.C_GenerateKey(IE.session, mechanisms, attributes,
-                            sizeof(attributes) / sizeof(CK_ATTRIBUTE),
-                            &IE.key_id);
+                            attrs_count(attributes), &IE.key_id);
     dbg_trace("Called C_GenerateKey() to create the import / export key "
               "(returned " CKR_FMT ")",
               ret);
