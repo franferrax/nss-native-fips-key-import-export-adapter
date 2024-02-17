@@ -89,14 +89,14 @@ static CK_RV export_and_store_key_in_tls(CK_OBJECT_CLASS key_class,
               "encrypted_key_len = %lu, ret = " CKR_FMT,
               encrypted_key_len, ret);
     if (ret != CKR_OK) {
-        goto cleanup;
+        return_with_cleanup(CKR_GENERAL_ERROR);
     }
 
     // Decrypt
     ret = P11.C_DecryptInit(IE.session, &IE.mech, IE.key_id);
     if (ret != CKR_OK) {
         dbg_trace("C_DecryptInit has failed with ret = " CKR_FMT, ret);
-        goto cleanup;
+        return_with_cleanup(CKR_GENERAL_ERROR);
     }
     p11_allocation_idiom(P11.C_Decrypt, encoded_key, encoded_key_len,
                          IE.session, encrypted_key, encrypted_key_len);
@@ -104,7 +104,7 @@ static CK_RV export_and_store_key_in_tls(CK_OBJECT_CLASS key_class,
               "ret = " CKR_FMT,
               encoded_key_len, ret);
     if (ret != CKR_OK) {
-        goto cleanup;
+        return_with_cleanup(CKR_GENERAL_ERROR);
     }
 
     // Decode and fix attributes template

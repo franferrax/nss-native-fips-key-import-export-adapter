@@ -23,18 +23,25 @@
 // Get the length of a fixed-size (stack / global) attributes array
 #define attrs_count(attributes) (sizeof(attributes) / sizeof(CK_ATTRIBUTE))
 
+// Load the return value in the 'ret' variable and jump to the 'cleanup' label
+#define return_with_cleanup(return_value)                                      \
+    do {                                                                       \
+        ret = (return_value);                                                  \
+        goto cleanup;                                                          \
+    } while (0)
+
 // Handle convention described in PKCS #11 v3.0 Section 5.2 on producing output
 #define p11_allocation_idiom(P11_Func, data, data_len, ...)                    \
     do {                                                                       \
         ret = P11_Func(__VA_ARGS__, NULL, &(data_len));                        \
         if (ret != CKR_OK) {                                                   \
             dbg_trace(#P11_Func "() has failed with ret = " CKR_FMT, ret);     \
-            goto cleanup;                                                      \
+            return_with_cleanup(CKR_GENERAL_ERROR);                            \
         }                                                                      \
         (data) = malloc(data_len);                                             \
         if ((data) == NULL) {                                                  \
             dbg_trace("Ran out of memory for the " #P11_Func "() call");       \
-            goto cleanup;                                                      \
+            return_with_cleanup(CKR_HOST_MEMORY);                              \
         }                                                                      \
         ret = P11_Func(__VA_ARGS__, (data), &(data_len));                      \
     } while (0)
