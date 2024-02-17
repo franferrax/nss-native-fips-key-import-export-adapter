@@ -64,14 +64,6 @@
         }                                                                      \
     } while (0)
 
-static inline bool is_importable_exportable(CK_OBJECT_CLASS key_class,
-                                            CK_KEY_TYPE key_type) {
-    // NOTE: see OPENJDK-824 for reasons behind skipping DH keys
-    return key_class == CKO_SECRET_KEY ||
-           (key_class == CKO_PRIVATE_KEY &&
-            (key_type == CKK_RSA || key_type == CKK_DSA || key_type == CKK_EC));
-}
-
 static inline bool get_key_type_from_object(CK_SESSION_HANDLE session,
                                             CK_OBJECT_HANDLE key_id,
                                             CK_OBJECT_CLASS *key_class,
