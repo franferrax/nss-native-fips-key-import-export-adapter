@@ -19,6 +19,16 @@
         (sec_item).len = (unsigned int)attributes[n].ulValueLen;               \
     } while (0)
 
+#define __attr_case(attr_type, sec_item)                                       \
+    case (attr_type):                                                          \
+        found_attrs++;                                                         \
+        if (attributes[n].pValue == NULL) {                                    \
+            dbg_trace_attr(#attr_type " has no data", attributes[n]);          \
+            return CKR_GENERAL_ERROR;                                          \
+        }                                                                      \
+        __nth_attr_to_SECItem(attr_type, (sec_item));                          \
+        break
+
 static CK_RV encode_secret_key(CK_ATTRIBUTE_PTR attributes,
                                CK_ULONG n_attributes,
                                SECItem *encoded_key_item) {
@@ -35,6 +45,9 @@ static CK_RV encode_secret_key(CK_ATTRIBUTE_PTR attributes,
 static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
                                 CK_ULONG n_attributes, CK_KEY_TYPE key_type,
                                 PLArenaPool *arena, SECItem *encoded_key_item) {
+    SECItem *params = NULL;
+    CK_ULONG found_attrs = 0;
+    SECOidTag alg_tag = SEC_OID_UNKNOWN;
     NSSLOWKEYPrivateKeyInfo *pki;
     NSSLOWKEYPrivateKey *lpk;
     if (!allocate_PrivateKeyInfo_and_PrivateKey(arena, &pki, &lpk)) {
@@ -43,19 +56,126 @@ static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
 
     switch (key_type) {
     case CKK_RSA:
-        // TODO: implement
-        return CKR_GENERAL_ERROR;
+        alg_tag = SEC_OID_PKCS1_RSA_ENCRYPTION;
+        lpk->keyType = NSSLOWKEYRSAKey;
+        lpk->u.rsa.arena = arena;
+        if (DER_SetUInteger(arena, &lpk->u.rsa.version,
+                            NSSLOWKEY_PRIVATE_KEY_INFO_VERSION) != SECSuccess) {
+            dbg_trace("Failed to encode the RSA private key version");
+            return CKR_GENERAL_ERROR;
+        }
+        prepare_low_rsa_priv_key_for_asn1(lpk);
+        found_attrs = 0;
+        for (size_t n = 0; n < n_attributes; n++) {
+            switch (attributes[n].type) {
+                __attr_case(CKA_MODULUS, lpk->u.rsa.modulus);
+                __attr_case(CKA_PUBLIC_EXPONENT, lpk->u.rsa.publicExponent);
+                __attr_case(CKA_PRIVATE_EXPONENT, lpk->u.rsa.privateExponent);
+                __attr_case(CKA_PRIME_1, lpk->u.rsa.prime1);
+                __attr_case(CKA_PRIME_2, lpk->u.rsa.prime2);
+                __attr_case(CKA_EXPONENT_1, lpk->u.rsa.exponent1);
+                __attr_case(CKA_EXPONENT_2, lpk->u.rsa.exponent2);
+                __attr_case(CKA_COEFFICIENT, lpk->u.rsa.coefficient);
+            default:
+                break;
+            }
+        }
+        if (found_attrs < 8) {
+            dbg_trace("Too few attributes for an RSA private key");
+            return CKR_TEMPLATE_INCOMPLETE;
+        }
+        if (SEC_ASN1EncodeItem(arena, &pki->privateKey, lpk,
+                               nsslowkey_RSAPrivateKeyTemplate) == NULL) {
+            dbg_trace("Failed to encode the RSA private key");
+            return CKR_GENERAL_ERROR;
+        }
+        dbg_trace("Successfully encoded RSA private key");
+        break;
     case CKK_DSA:
-        // TODO: implement
-        return CKR_GENERAL_ERROR;
+        alg_tag = SEC_OID_ANSIX9_DSA_SIGNATURE;
+        lpk->keyType = NSSLOWKEYDSAKey;
+        lpk->u.dsa.params.arena = arena;
+        prepare_low_dsa_priv_key_export_for_asn1(lpk);
+        prepare_low_pqg_params_for_asn1(&lpk->u.dsa.params);
+        found_attrs = 0;
+        for (size_t n = 0; n < n_attributes; n++) {
+            switch (attributes[n].type) {
+                __attr_case(CKA_PRIME, lpk->u.dsa.params.prime);
+                __attr_case(CKA_SUBPRIME, lpk->u.dsa.params.subPrime);
+                __attr_case(CKA_BASE, lpk->u.dsa.params.base);
+                __attr_case(CKA_VALUE, lpk->u.dsa.privateValue);
+            default:
+                break;
+            }
+        }
+        if (found_attrs < 4) {
+            dbg_trace("Too few attributes for a DSA private key");
+            return CKR_TEMPLATE_INCOMPLETE;
+        }
+        params = SEC_ASN1EncodeItem(arena, NULL, &lpk->u.dsa.params,
+                                    nsslowkey_PQGParamsTemplate);
+        if (params == NULL) {
+            dbg_trace("Failed to encode the DSA private key PQG params");
+            return CKR_GENERAL_ERROR;
+        }
+        if (SEC_ASN1EncodeItem(arena, &pki->privateKey, lpk,
+                               nsslowkey_DSAPrivateKeyExportTemplate) == NULL) {
+            dbg_trace("Failed to encode the DSA private key");
+            return CKR_GENERAL_ERROR;
+        }
+        dbg_trace("Successfully encoded DSA private key");
+        break;
     case CKK_EC:
-        // TODO: implement
-        return CKR_GENERAL_ERROR;
+        alg_tag = SEC_OID_ANSIX962_EC_PUBLIC_KEY;
+        lpk->keyType = NSSLOWKEYECKey;
+        lpk->u.ec.ecParams.arena = arena;
+        if (DER_SetUInteger(arena, &lpk->u.ec.version,
+                            NSSLOWKEY_EC_PRIVATE_KEY_VERSION) != SECSuccess) {
+            dbg_trace("Failed to encode the EC private key version");
+            return CKR_GENERAL_ERROR;
+        }
+        prepare_low_ec_priv_key_for_asn1(lpk);
+        found_attrs = 0;
+        for (size_t n = 0; n < n_attributes; n++) {
+            switch (attributes[n].type) {
+                __attr_case(CKA_EC_PARAMS, lpk->u.ec.ecParams.DEREncoding);
+                __attr_case(CKA_VALUE, lpk->u.ec.privateValue);
+            default:
+                break;
+            }
+        }
+        if (found_attrs < 2) {
+            dbg_trace("Too few attributes for an EC private key");
+            return CKR_TEMPLATE_INCOMPLETE;
+        }
+        params = SECITEM_ArenaDupItem(arena, &lpk->u.ec.ecParams.DEREncoding);
+        if (SEC_ASN1EncodeItem(arena, &pki->privateKey, lpk,
+                               nsslowkey_ECPrivateKeyTemplate) == NULL) {
+            dbg_trace("Failed to encode the EC private key");
+            return CKR_GENERAL_ERROR;
+        }
+        dbg_trace("Successfully encoded EC private key");
+        break;
     default:
         dbg_trace("Unknown key type");
         return CKR_GENERAL_ERROR;
     }
 
+    if (SECOID_SetAlgorithmID(arena, &pki->algorithm, alg_tag, params) !=
+        SECSuccess) {
+        dbg_trace("Failed to encode the private key algorithm");
+        return CKR_GENERAL_ERROR;
+    }
+    if (SEC_ASN1EncodeInteger(arena, &pki->version,
+                              NSSLOWKEY_PRIVATE_KEY_INFO_VERSION) == NULL) {
+        dbg_trace("Failed to encode the private key version");
+        return CKR_GENERAL_ERROR;
+    }
+    if (SEC_ASN1EncodeItem(arena, encoded_key_item, pki,
+                           nsslowkey_PrivateKeyInfoTemplate) == NULL) {
+        dbg_trace("Failed to encode the private key");
+        return CKR_GENERAL_ERROR;
+    }
     return CKR_OK;
 }
 
