@@ -80,10 +80,9 @@ static CK_ATTRIBUTE_PTR getSensitiveCachedAttr(CK_ATTRIBUTE_TYPE type) {
 CK_RV C_CreateObject(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTemplate,
                      CK_ULONG ulCount, CK_OBJECT_HANDLE_PTR phObject) {
     CK_RV ret = o->C_CreateObject(hSession, pTemplate, ulCount, phObject);
-    dbg_trace("Forwarded to original function (returned " GREPABLE(
-                  CKR) "), "
-                       "parameters:\nhSession = " HEX32 ", pTemplate = " HEX64
-                       ", ulCount = %lu, phObject = " HEX64,
+    dbg_trace("Forwarded to original function (returned " CKR_FMT "), "
+              "parameters:\nhSession = " HEX32 ", pTemplate = " HEX64
+              ", ulCount = %lu, phObject = " HEX64,
               ret, hSession, (uintptr_t)pTemplate, ulCount,
               (uintptr_t)phObject);
     return ret;
@@ -150,8 +149,8 @@ static CK_RV exportKey(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
     // Wrap
     ALLOCATION_IDIOM(o->C_WrapKey, pEncryptedKey, encryptedKeyLen, ieKeySession,
                      &ieKeyMech, ieKey, hObject);
-    dbg_trace("Called C_WrapKey() to export the key (returned " GREPABLE(
-                  CKR) "), wrapped key len = %lu",
+    dbg_trace("Called C_WrapKey() to export the key (returned " CKR_FMT
+              "), wrapped key len = %lu",
               ret, encryptedKeyLen);
     if (ret != CKR_OK) {
         goto end;
@@ -160,13 +159,13 @@ static CK_RV exportKey(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
     // Decrypt
     ret = o->C_DecryptInit(ieKeySession, &ieKeyMech, ieKey);
     if (ret != CKR_OK) {
-        dbg_trace("C_DecryptInit has failed with " GREPABLE(CKR), ret);
+        dbg_trace("C_DecryptInit has failed with " CKR_FMT, ret);
         goto end;
     }
     ALLOCATION_IDIOM(o->C_Decrypt, pEncodedKey, encodedKeyLen, ieKeySession,
                      pEncryptedKey, encryptedKeyLen);
-    dbg_trace("Called C_Decrypt() to export the key (returned " GREPABLE(
-                  CKR) "), encoded key len = %lu",
+    dbg_trace("Called C_Decrypt() to export the key (returned " CKR_FMT
+              "), encoded key len = %lu",
               ret, encodedKeyLen);
     if (ret != CKR_OK) {
         goto end;
@@ -215,10 +214,9 @@ end:
 CK_RV C_GetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
                           CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount) {
     CK_RV ret = o->C_GetAttributeValue(hSession, hObject, pTemplate, ulCount);
-    dbg_trace("Forwarded to original function (returned " GREPABLE(
-                  CKR) "), "
-                       "parameters:\nhSession = " HEX32
-                       ", hObject = %lu, pTemplate = " HEX64 ", ulCount = %lu",
+    dbg_trace("Forwarded to original function (returned " CKR_FMT "), "
+              "parameters:\nhSession = " HEX32
+              ", hObject = %lu, pTemplate = " HEX64 ", ulCount = %lu",
               ret, hSession, hObject, (uintptr_t)pTemplate, ulCount);
     if (dbg_is_enabled()) {
         for (CK_ULONG i = 0; i < ulCount; i++) {
@@ -323,7 +321,7 @@ CK_RV initializeImporterExporter() {
     CK_TOKEN_INFO info;
     CK_RV ret = o->C_GetTokenInfo(FIPS_SLOT_ID, &info);
     dbg_trace("Called C_GetTokenInfo() to remove the login requirement "
-              "(returned " GREPABLE(CKR) ")",
+              "(returned " CKR_FMT ")",
               ret);
     if (ret != CKR_OK) {
         return ret;
@@ -332,7 +330,7 @@ CK_RV initializeImporterExporter() {
     ret = o->C_OpenSession(FIPS_SLOT_ID, CKF_SERIAL_SESSION, NULL, NULL,
                            &ieKeySession);
     dbg_trace("Called C_OpenSession() to create the session for the "
-              "import/export key (returned " GREPABLE(CKR) ")",
+              "import/export key (returned " CKR_FMT ")",
               ret);
     if (ret != CKR_OK) {
         return ret;
@@ -350,16 +348,15 @@ CK_RV initializeImporterExporter() {
     ret = o->C_GenerateKey(ieKeySession, mechanisms, attributes,
                            sizeof(attributes) / sizeof(CK_ATTRIBUTE), &ieKey);
     dbg_trace("Called C_GenerateKey() to create the import/export key "
-              "(returned " GREPABLE(CKR) ")",
+              "(returned " CKR_FMT ")",
               ret);
     return ret;
 }
 
 CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
     CK_RV ret = o->C_Initialize(pInitArgs);
-    dbg_trace("Forwarded to original function (returned " GREPABLE(
-                  CKR) "), "
-                       "pInitArgs = " HEX64,
+    dbg_trace("Forwarded to original function (returned " CKR_FMT "), "
+              "pInitArgs = " HEX64,
               ret, (uintptr_t)pInitArgs);
     if (ret == CKR_OK) {
         // After loading this native library, the SunPKCS11 constructor calls

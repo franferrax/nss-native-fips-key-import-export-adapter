@@ -13,24 +13,26 @@
     EXPORTED_FUNCTION ret_type name(__VA_ARGS__)
 
 // Qualify the printed value with its macro prefix, so we can copy the printed
-// REGEX and execute `grep -rE "^\s*#define\s+$(xclip -sel clip)" /usr/include`
+// REGEX and execute `grep -irE "^\s*#define\s+$(xclip -sel clip)" /usr/include`
 // to know the defined value
-#define GREPABLE(prefix) #prefix "_.*" HEX32
+#define __grep_able(prefix) #prefix "_.*" HEX32
+#define CKA_FMT             __grep_able(CKA)
+#define CKK_FMT             __grep_able(CKK)
+#define CKO_FMT             __grep_able(CKO)
+#define CKR_FMT             __grep_able(CKR)
 
 #define dbg_trace_attr(attr)                                                   \
     do {                                                                       \
-        dbg_trace(                                                             \
-            (attr) == NULL                                                     \
-                ? "ATTR: NULL"                                                 \
-                : ((attr)->ulValueLen == CK_UNAVAILABLE_INFORMATION            \
-                       ? "ATTR: type = " GREPABLE(                             \
-                             CKA) ", pValue = " HEX64                          \
-                                  ", ulValueLen = CK_UNAVAILABLE_INFORMATION"  \
-                       : "ATTR: type = " GREPABLE(CKA) ", pValue = " HEX64     \
-                                                       ", ulValueLen = %lu"),  \
-            (attr) == NULL ? 0 : (attr)->type,                                 \
-            (attr) == NULL ? 0 : (uintptr_t)(attr)->pValue,                    \
-            (attr) == NULL ? 0 : (attr)->ulValueLen);                          \
+        dbg_trace((attr) == NULL                                               \
+                      ? "ATTR: NULL"                                           \
+                      : ((attr)->ulValueLen == CK_UNAVAILABLE_INFORMATION      \
+                             ? "ATTR: type = " CKA_FMT ", pValue = " HEX64     \
+                               ", ulValueLen = CK_UNAVAILABLE_INFORMATION"     \
+                             : "ATTR: type = " CKA_FMT ", pValue = " HEX64     \
+                               ", ulValueLen = %lu"),                          \
+                  (attr) == NULL ? 0 : (attr)->type,                           \
+                  (attr) == NULL ? 0 : (uintptr_t)(attr)->pValue,              \
+                  (attr) == NULL ? 0 : (attr)->ulValueLen);                    \
     } while (0)
 
 // Handle the convention described in PKCS #11 Section 5.2 on producing output
@@ -38,7 +40,7 @@
     do {                                                                       \
         ret = api(__VA_ARGS__, NULL, &dataLen);                                \
         if (ret != CKR_OK) {                                                   \
-            dbg_trace(#api "() has failed with " GREPABLE(CKR), ret);          \
+            dbg_trace(#api "() has failed with " CKR_FMT, ret);                \
             goto end;                                                          \
         }                                                                      \
         pData = malloc(dataLen);                                               \
@@ -69,11 +71,10 @@ static inline CK_RV getKeyType(CK_FUNCTION_LIST_PTR o,
     CK_RV ret = o->C_GetAttributeValue(hSession, hObject, attrs,
                                        sizeof(attrs) / sizeof(CK_ATTRIBUTE));
     if (ret == CKR_OK) {
-        dbg_trace("key ID = %lu, key class = " GREPABLE(
-                      CKO) ", key type = " GREPABLE(CKK),
+        dbg_trace("key ID = %lu, key class = " CKO_FMT ", key type = " CKK_FMT,
                   hObject, *pKeyClass, *pKeyType);
     } else {
-        dbg_trace("C_GetAttributeValue call failed with " GREPABLE(CKR), ret);
+        dbg_trace("C_GetAttributeValue call failed with " CKR_FMT, ret);
     }
     return ret;
 }
