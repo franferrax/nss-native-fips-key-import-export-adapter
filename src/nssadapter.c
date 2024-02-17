@@ -63,7 +63,7 @@ CK_RV C_CreateObject(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTemplate,
                      CK_ULONG ulCount, CK_OBJECT_HANDLE_PTR phObject) {
     CK_RV ret = P11.C_CreateObject(hSession, pTemplate, ulCount, phObject);
     dbg_trace("Forwarded to original function (returned " CKR_FMT "), "
-              "parameters:\nhSession = 0x%08lx, pTemplate = %p, "
+              "parameters:\n  hSession = 0x%08lx, pTemplate = %p, "
               "ulCount = %lu, phObject = %p",
               ret, hSession, (void *)pTemplate, ulCount, (void *)phObject);
     return ret;
@@ -102,8 +102,8 @@ static CK_RV initialize_importer_exporter() {
     // C_GetTokenInfo() call, and stops requiring login on each operation
     CK_TOKEN_INFO info;
     CK_RV ret = P11.C_GetTokenInfo(FIPS_SLOT_ID, &info);
-    dbg_trace("Called C_GetTokenInfo() to remove the login requirement "
-              "(returned " CKR_FMT ")",
+    dbg_trace("Called C_GetTokenInfo() to remove the login requirement\n  "
+              "ret = " CKR_FMT,
               ret);
     if (ret != CKR_OK) {
         return ret;
@@ -113,7 +113,7 @@ static CK_RV initialize_importer_exporter() {
     ret = P11.C_OpenSession(FIPS_SLOT_ID, CKF_SERIAL_SESSION, NULL, NULL,
                             &IE.session);
     dbg_trace("Called C_OpenSession() to create the session for the "
-              "import / export key (returned " CKR_FMT ")",
+              "import / export key\n  ret = " CKR_FMT,
               ret);
     if (ret != CKR_OK) {
         return ret;
@@ -131,17 +131,16 @@ static CK_RV initialize_importer_exporter() {
     };
     ret = P11.C_GenerateKey(IE.session, mechanisms, attributes,
                             attrs_count(attributes), &IE.key_id);
-    dbg_trace("Called C_GenerateKey() to create the import / export key "
-              "(returned " CKR_FMT ")",
+    dbg_trace("Called C_GenerateKey() to create the import / export key\n  "
+              "ret = " CKR_FMT,
               ret);
     return ret;
 }
 
 CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
     CK_RV ret = P11.C_Initialize(pInitArgs);
-    dbg_trace("Forwarded to original function (returned " CKR_FMT "), "
-              "pInitArgs = %p",
-              ret, (void *)pInitArgs);
+    dbg_trace("Forwarded to NSS function\n  pInitArgs = %p, ret = " CKR_FMT,
+              pInitArgs, ret);
     if (ret == CKR_OK) {
         // After loading this native library, the SunPKCS11 constructor calls
         // PKCS11::getInstance(), which is a synchronized method. This method
@@ -168,8 +167,8 @@ EXPORTED_FUNCTION CK_RV C_GetInterface(CK_UTF8CHAR_PTR pInterfaceName,
                                        CK_VERSION_PTR pVersion,
                                        CK_INTERFACE_PTR_PTR ppInterface,
                                        CK_FLAGS flags) {
-    dbg_trace("Parameters:\npInterfaceName = \"%s\", pVersion = %p, "
-              "ppInterface = %p, flags = %lu",
+    dbg_trace("Adapting NSS interface\n  pInterfaceName = \"%s\", "
+              "pVersion = %p, ppInterface = %p, flags = %lu",
               pInterfaceName, (void *)pVersion, (void *)ppInterface, flags);
     if (pInterfaceName != NULL) {
         dbg_trace("Only the default interface is supported by this adapter");
@@ -209,8 +208,8 @@ EXPORTED_FUNCTION CK_RV C_GetInterface(CK_UTF8CHAR_PTR pInterfaceName,
 
 EXPORTED_FUNCTION CK_RV
 C_GetFunctionList(CK_FUNCTION_LIST_PTR_PTR ppFunctionList) {
-    dbg_trace("Only the C_GetInterface() API is supported by this adapter "
-              "(ppFunctionList = %p)",
+    dbg_trace("Only the C_GetInterface() API is supported by this adapter\n  "
+              "ppFunctionList = %p",
               (void *)ppFunctionList);
     *ppFunctionList = NULL;
     return CKR_GENERAL_ERROR;

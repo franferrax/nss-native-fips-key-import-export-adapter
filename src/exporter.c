@@ -85,9 +85,9 @@ static CK_RV export_and_store_key_in_tls(CK_OBJECT_CLASS key_class,
     // Wrap
     p11_allocation_idiom(P11.C_WrapKey, encrypted_key, encrypted_key_len,
                          IE.session, &IE.mech, IE.key_id, key_id);
-    dbg_trace("Called C_WrapKey() to export the key (returned " CKR_FMT
-              "), wrapped key len = %lu",
-              ret, encrypted_key_len);
+    dbg_trace("Called C_WrapKey() to export the key\n  "
+              "encrypted_key_len = %lu, ret = " CKR_FMT,
+              encrypted_key_len, ret);
     if (ret != CKR_OK) {
         goto cleanup;
     }
@@ -95,14 +95,14 @@ static CK_RV export_and_store_key_in_tls(CK_OBJECT_CLASS key_class,
     // Decrypt
     ret = P11.C_DecryptInit(IE.session, &IE.mech, IE.key_id);
     if (ret != CKR_OK) {
-        dbg_trace("C_DecryptInit has failed with " CKR_FMT, ret);
+        dbg_trace("C_DecryptInit has failed with ret = " CKR_FMT, ret);
         goto cleanup;
     }
     p11_allocation_idiom(P11.C_Decrypt, encoded_key, encoded_key_len,
                          IE.session, encrypted_key, encrypted_key_len);
-    dbg_trace("Called C_Decrypt() to export the key (returned " CKR_FMT
-              "), encoded key len = %lu",
-              ret, encoded_key_len);
+    dbg_trace("Called C_Decrypt() to export the key\n  encoded_key_len = %lu, "
+              "ret = " CKR_FMT,
+              encoded_key_len, ret);
     if (ret != CKR_OK) {
         goto cleanup;
     }
@@ -136,10 +136,10 @@ CK_RV export_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
                  CK_ATTRIBUTE_PTR attributes, CK_ULONG n_attributes) {
     CK_RV ret =
         P11.C_GetAttributeValue(session, key_id, attributes, n_attributes);
-    dbg_trace("Forwarded to original function (returned " CKR_FMT "), "
-              "parameters:\nsession = 0x%08lx, key_id = %lu, "
-              "attributes = %p, n_attributes = %lu",
-              ret, session, key_id, (void *)attributes, n_attributes);
+    dbg_trace("Forwarded to NSS C_GetAttributeValue()\n  session = 0x%08lx, "
+              "key_id = %lu, attributes = %p, n_attributes = %lu, "
+              "ret = " CKR_FMT,
+              session, key_id, (void *)attributes, n_attributes, ret);
     if (dbg_is_enabled()) {
         for (size_t n = 0; n < n_attributes; n++) {
             dbg_trace_attr("Attribute returned by NSS C_GetAttributeValue()",
@@ -159,21 +159,19 @@ CK_RV export_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
                           "CK_FALSE");
                 return CKR_GENERAL_ERROR;
             }
-            if ( // For non-sensitive keys, the exporter isn't necessary:
-                (sensitive != NULL && *sensitive == CK_FALSE) ||
-                // For non-extractable keys, the exporter doesn't work:
+            if ((sensitive != NULL && *sensitive == CK_FALSE) ||
                 (extractable != NULL && *extractable == CK_FALSE)) {
+                // For non-sensitive keys the exporter isn't necessary,
+                // for non-extractable keys the exporter doesn't work.
                 break;
             }
             if (token != NULL && sensitive != NULL && extractable != NULL) {
-                // Non-token, sensitive and extractable key:
-                if (!(key_class == CKO_PRIVATE_KEY && key_type == CKK_DH)) {
-                    // See OPENJDK-824 for reasons behind skipping DH keys
-                    dbg_trace("Forcing extractable key to be non-sensitive, "
-                              "to prevent an opaque Java key object, which "
-                              "does not get certain attributes");
-                    *sensitive = CK_FALSE;
-                }
+                // Non-token, sensitive and extractable key, we need
+                // to prevent an opaque SunPKCS11 P11Key object, which
+                // refrains from obtaining the sensitive attributes.
+                dbg_trace("Extractable key, forcing CKA_SENSITIVE=CK_FALSE "
+                          "to avoid opaque P11Key objects");
+                *sensitive = CK_FALSE;
                 break;
             }
         }
@@ -200,7 +198,7 @@ CK_RV export_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
                               cached_attr->ulValueLen);
                     attributes[n].ulValueLen = cached_attr->ulValueLen;
                 } else {
-                    // Second call, Java has allocated the buffers and
+                    // Second call, libj2pkcs11 has allocated the buffers and
                     // is trying to retrieve the attribute values
                     if (cached_attr->pValue == NULL) {
                         dbg_trace("No exported key is available to return");
