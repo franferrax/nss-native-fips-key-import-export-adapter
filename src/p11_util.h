@@ -94,6 +94,46 @@ static inline bool get_key_type_from_object(CK_SESSION_HANDLE session,
     }
 }
 
+static inline bool get_key_type_from_attrs(CK_OBJECT_CLASS *key_class,
+                                           CK_KEY_TYPE *key_type,
+                                           CK_ATTRIBUTE_PTR attributes,
+                                           CK_ULONG n_attributes) {
+    bool has_key_class = false;
+    bool has_key_type = false;
+    for (size_t n = 0; n < n_attributes; n++) {
+        if (attributes[n].pValue != NULL) {
+            if (attributes[n].type == CKA_CLASS &&
+                attributes[n].ulValueLen == sizeof(CK_OBJECT_CLASS)) {
+                *key_class = *((CK_OBJECT_CLASS *)attributes[n].pValue);
+                has_key_class = true;
+                if (has_key_type) {
+                    break;
+                }
+            } else if (attributes[n].type == CKA_KEY_TYPE &&
+                       attributes[n].ulValueLen == sizeof(CK_KEY_TYPE)) {
+                *key_type = *((CK_KEY_TYPE *)attributes[n].pValue);
+                has_key_type = true;
+                if (has_key_class) {
+                    break;
+                }
+            }
+        }
+    }
+    if (dbg_is_enabled()) {
+        if (has_key_class && has_key_type) {
+            dbg_trace("key: class = " CKO_FMT ", type = " CKK_FMT, *key_class,
+                      *key_type);
+        } else if (has_key_class) {
+            dbg_trace("key: class = " CKO_FMT ", type = NONE", *key_class);
+        } else if (has_key_type) {
+            dbg_trace("key: class = NONE, type = " CKK_FMT, *key_type);
+        } else {
+            dbg_trace("key: class = NONE, type = NONE");
+        }
+    }
+    return has_key_class && has_key_type;
+}
+
 static inline bool
 allocate_PrivateKeyInfo_and_PrivateKey(PLArenaPool *arena,
                                        NSSLOWKEYPrivateKeyInfo **pki,

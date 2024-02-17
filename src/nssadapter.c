@@ -3,9 +3,9 @@
 #include "nssadapter.h"
 #include "dbg_trace.h"
 #include "exporter.h"
+#include "importer.h"
 #include "p11_util.h"
 #include <nss3/pkcs11.h>
-#include <string.h>
 
 /* ****************************************************************************
  * Global importer / exporter data
@@ -61,12 +61,18 @@ static inline bool is_importable_exportable(CK_OBJECT_CLASS key_class,
 
 CK_RV C_CreateObject(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTemplate,
                      CK_ULONG ulCount, CK_OBJECT_HANDLE_PTR phObject) {
-    CK_RV ret = P11.C_CreateObject(hSession, pTemplate, ulCount, phObject);
-    dbg_trace("Forwarded to original function (returned " CKR_FMT "), "
-              "parameters:\n  hSession = 0x%08lx, pTemplate = %p, "
-              "ulCount = %lu, phObject = %p",
-              ret, hSession, (void *)pTemplate, ulCount, (void *)phObject);
-    return ret;
+    CK_OBJECT_CLASS keyClass = (CK_OBJECT_CLASS)-1;
+    CK_KEY_TYPE keyType = (CK_KEY_TYPE)-1;
+    if (!get_key_type_from_attrs(&keyClass, &keyType, pTemplate, ulCount) ||
+        !is_importable_exportable(keyClass, keyType)) {
+        dbg_trace("There is no support for importing this key, forwarding to "
+                  "NSS\n  hSession = 0x%08lx, pTemplate = %p, ulCount = %lu, "
+                  "phObject = %p",
+                  hSession, (void *)pTemplate, ulCount, (void *)phObject);
+        return P11.C_CreateObject(hSession, pTemplate, ulCount, phObject);
+    }
+    return import_key(keyClass, keyType, hSession, pTemplate, ulCount,
+                      phObject);
 }
 
 /* ****************************************************************************
