@@ -53,47 +53,29 @@ static CK_RV decode_and_store_secret_key(CK_BYTE_PTR *encoded_key,
     return CKR_OK;
 }
 
-static CK_RV export_rsa_private_key(CK_BYTE_PTR encoded_key,
-                                    CK_ULONG encoded_key_len,
-                                    CK_ATTRIBUTE_PTR attributes,
-                                    CK_ULONG n_attributes) {
-    dbg_trace("encoded_key = %p, encoded_key_len = %lu, attributes = %p, "
-              "n_attributes = %lu",
-              (void *)encoded_key, encoded_key_len, (void *)attributes,
-              n_attributes);
-    // TODO: implement
-    return CKR_GENERAL_ERROR;
-}
-
-static CK_RV export_dsa_private_key(CK_BYTE_PTR encoded_key,
-                                    CK_ULONG encoded_key_len,
-                                    CK_ATTRIBUTE_PTR attributes,
-                                    CK_ULONG n_attributes) {
-    dbg_trace("encoded_key = %p, encoded_key_len = %lu, attributes = %p, "
-              "n_attributes = %lu",
-              (void *)encoded_key, encoded_key_len, (void *)attributes,
-              n_attributes);
-    // TODO: implement
-    return CKR_GENERAL_ERROR;
-}
-
-static CK_RV export_ec_private_key(CK_BYTE_PTR encoded_key,
-                                   CK_ULONG encoded_key_len,
-                                   CK_ATTRIBUTE_PTR attributes,
-                                   CK_ULONG n_attributes) {
-    dbg_trace("encoded_key = %p, encoded_key_len = %lu, attributes = %p, "
-              "n_attributes = %lu",
-              (void *)encoded_key, encoded_key_len, (void *)attributes,
-              n_attributes);
-    // TODO: implement
-    return CKR_GENERAL_ERROR;
+static CK_RV decode_and_store_private_key(CK_KEY_TYPE key_type,
+                                          CK_BYTE_PTR *encoded_key,
+                                          CK_ULONG encoded_key_len) {
+    switch (key_type) {
+    case CKK_RSA:
+        // TODO: implement
+        return CKR_GENERAL_ERROR;
+    case CKK_DSA:
+        // TODO: implement
+        return CKR_GENERAL_ERROR;
+    case CKK_EC:
+        // TODO: implement
+        return CKR_GENERAL_ERROR;
+    default:
+        dbg_trace("Unknown key type: " CKK_FMT, key_type);
+        return CKR_GENERAL_ERROR;
+    }
+    return CKR_OK;
 }
 
 static CK_RV export_and_store_key_in_tls(CK_OBJECT_CLASS key_class,
                                          CK_KEY_TYPE key_type,
-                                         CK_OBJECT_HANDLE key_id,
-                                         CK_ATTRIBUTE_PTR attributes,
-                                         CK_ULONG n_attributes) {
+                                         CK_OBJECT_HANDLE key_id) {
     CK_RV ret = CKR_OK;
     CK_BYTE_PTR encoded_key = NULL;
     CK_ULONG encoded_key_len = 0;
@@ -131,24 +113,8 @@ static CK_RV export_and_store_key_in_tls(CK_OBJECT_CLASS key_class,
         ret = decode_and_store_secret_key(&encoded_key, encoded_key_len);
         break;
     case CKO_PRIVATE_KEY:
-        switch (key_type) {
-        case CKK_RSA:
-            ret = export_rsa_private_key(encoded_key, encoded_key_len,
-                                         attributes, n_attributes);
-            break;
-        case CKK_DSA:
-            ret = export_dsa_private_key(encoded_key, encoded_key_len,
-                                         attributes, n_attributes);
-            break;
-        case CKK_EC:
-            ret = export_ec_private_key(encoded_key, encoded_key_len,
-                                        attributes, n_attributes);
-            break;
-        default:
-            dbg_trace("Unknown key type");
-            ret = CKR_GENERAL_ERROR;
-            break;
-        }
+        ret = decode_and_store_private_key(key_type, &encoded_key,
+                                           encoded_key_len);
         break;
     default:
         dbg_trace("Unknown key class");
@@ -224,8 +190,7 @@ CK_RV export_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
                     // First call, Java is querying the buffer sizes
                     if (cached_attr->pValue == NULL) {
                         ret = export_and_store_key_in_tls(key_class, key_type,
-                                                          key_id, attributes,
-                                                          n_attributes);
+                                                          key_id);
                         if (ret != CKR_OK) {
                             return CKR_GENERAL_ERROR;
                         }
