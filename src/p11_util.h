@@ -7,11 +7,6 @@
 
 #define FIPS_SLOT_ID 3
 
-// Define a function having its NSS FIPS prototype (FC_... proto + C_... func)
-#define WITH_FIPS_PROTOTYPE(ret_type, name, ...)                               \
-    ret_type F##name(__VA_ARGS__);                                             \
-    EXPORTED_FUNCTION ret_type name(__VA_ARGS__)
-
 // Qualify the printed value with its macro prefix, so we can copy the printed
 // REGEX and execute `grep -irE "^\s*#define\s+$(xclip -sel clip)" /usr/include`
 // to know the defined value

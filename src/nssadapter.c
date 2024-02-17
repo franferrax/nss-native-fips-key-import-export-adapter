@@ -376,9 +376,14 @@ CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
  * Exported functions
  * ****************************************************************************/
 
-WITH_FIPS_PROTOTYPE(CK_RV, C_GetInterface, CK_UTF8CHAR_PTR pInterfaceName,
-                    CK_VERSION_PTR pVersion, CK_INTERFACE_PTR_PTR ppInterface,
-                    CK_FLAGS flags) {
+// Prototype for the FIPS version in NSS' libsoftokn3.so
+CK_RV FC_GetInterface(CK_UTF8CHAR_PTR pInterfaceName, CK_VERSION_PTR pVersion,
+                      CK_INTERFACE_PTR_PTR ppInterface, CK_FLAGS flags);
+
+EXPORTED_FUNCTION CK_RV C_GetInterface(CK_UTF8CHAR_PTR pInterfaceName,
+                                       CK_VERSION_PTR pVersion,
+                                       CK_INTERFACE_PTR_PTR ppInterface,
+                                       CK_FLAGS flags) {
     dbg_trace("Parameters:\npInterfaceName = \"%s\", pVersion = %p, "
               "ppInterface = %p, flags = %lu",
               pInterfaceName, (void *)pVersion, (void *)ppInterface, flags);
@@ -418,8 +423,8 @@ WITH_FIPS_PROTOTYPE(CK_RV, C_GetInterface, CK_UTF8CHAR_PTR pInterfaceName,
     return ret;
 }
 
-WITH_FIPS_PROTOTYPE(CK_RV, C_GetFunctionList,
-                    CK_FUNCTION_LIST_PTR_PTR ppFunctionList) {
+EXPORTED_FUNCTION CK_RV
+C_GetFunctionList(CK_FUNCTION_LIST_PTR_PTR ppFunctionList) {
     dbg_trace("Only the C_GetInterface() API is supported by this adapter "
               "(ppFunctionList = %p)",
               (void *)ppFunctionList);
