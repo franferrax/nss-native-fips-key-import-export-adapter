@@ -11,6 +11,7 @@
 // Thread-local stored exported attributes, to keep them
 // from one call (querying the buffer sizes) to the other
 // (passing the allocated buffers to get the attributes).
+static __thread bool cached_attrs_initialized = false;
 static __thread CK_ATTRIBUTE cached_sensitive_attrs[] = {
     {CKA_VALUE,            NULL, 0},
     {CKA_PRIVATE_EXPONENT, NULL, 0},
@@ -41,6 +42,18 @@ get_sensitive_cached_attr(CK_ATTRIBUTE_TYPE type) {
     default:
         return NULL;
     }
+}
+
+static inline void clear_sensitive_cached_attrs(void) {
+    for (size_t n = 0; n < attrs_count(cached_sensitive_attrs); n++) {
+        if (cached_sensitive_attrs[n].pValue != NULL) {
+            zeroize_and_free(cached_sensitive_attrs[n].pValue,
+                             cached_sensitive_attrs[n].ulValueLen);
+            cached_sensitive_attrs[n].pValue = NULL;
+        }
+        cached_sensitive_attrs[n].ulValueLen = 0;
+    }
+    cached_attrs_initialized = false;
 }
 
 static CK_RV decode_and_store_secret_key(CK_BYTE_PTR *encoded_key,
@@ -121,6 +134,10 @@ static CK_RV export_and_store_key_in_tls(CK_OBJECT_CLASS key_class,
         ret = CKR_GENERAL_ERROR;
         break;
     }
+    if (ret == CKR_OK) {
+        cached_attrs_initialized = true;
+    }
+
 cleanup:
     if (encrypted_key != NULL) {
         zeroize_and_free(encrypted_key, encrypted_key_len);
@@ -134,8 +151,42 @@ cleanup:
 CK_RV export_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
                  CK_SESSION_HANDLE session, CK_OBJECT_HANDLE key_id,
                  CK_ATTRIBUTE_PTR attributes, CK_ULONG n_attributes) {
-    CK_RV ret =
-        P11.C_GetAttributeValue(session, key_id, attributes, n_attributes);
+    CK_RV ret = CKR_OK;
+
+    // Check convention described in PKCS #11 v3.0 Section 5.2 on producing
+    // output. We know libj2pkcs11 OpenJDK native library uses this convention.
+    for (size_t n = 0; n < n_attributes; n++) {
+        CK_ATTRIBUTE_PTR cached_attr =
+            get_sensitive_cached_attr(attributes[n].type);
+        if (cached_attr == NULL) {
+            // Skip known non-sensitive attribute
+            continue;
+        }
+        if (!cached_attrs_initialized && attributes[n].pValue != NULL) {
+            dbg_trace_attr("First call should query the buffer sizes, "
+                           "offending attribute",
+                           attributes[n]);
+            return_with_cleanup(CKR_GENERAL_ERROR);
+        }
+        if (cached_attrs_initialized) {
+            if (attributes[n].pValue == NULL) {
+                dbg_trace_attr("Second call should have allocated the buffers, "
+                               "offending attribute",
+                               attributes[n]);
+                return_with_cleanup(CKR_GENERAL_ERROR);
+            }
+            if (cached_attr->pValue == NULL ||
+                cached_attr->ulValueLen != attributes[n].ulValueLen) {
+                dbg_trace_attr("Cached attribute and destination attribute "
+                               "data mismatch, offending attribute",
+                               attributes[n]);
+                dbg_trace_attr("Corresponding cached attribute", *cached_attr);
+                return_with_cleanup(CKR_GENERAL_ERROR);
+            }
+        }
+    }
+
+    ret = P11.C_GetAttributeValue(session, key_id, attributes, n_attributes);
     dbg_trace("Forwarded to NSS C_GetAttributeValue()\n  session = 0x%08lx, "
               "key_id = %lu, attributes = %p, n_attributes = %lu, "
               "ret = " CKR_FMT,
@@ -146,84 +197,82 @@ CK_RV export_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
                            attributes[n]);
         }
     }
-    if (ret == CKR_OK && n_attributes >= 3) {
-        CK_BBOOL *token = NULL;
-        CK_BBOOL *sensitive = NULL;
-        CK_BBOOL *extractable = NULL;
-        for (size_t n = 0; n < n_attributes; n++) {
-            get_matching_bool(attributes[n], CKA_TOKEN, token);
-            get_matching_bool(attributes[n], CKA_SENSITIVE, sensitive);
-            get_matching_bool(attributes[n], CKA_EXTRACTABLE, extractable);
-            if (token != NULL && *token == CK_TRUE) {
-                dbg_trace("Without an NSS DB, CKA_TOKEN should always be "
-                          "CK_FALSE");
-                return CKR_GENERAL_ERROR;
-            }
-            if ((sensitive != NULL && *sensitive == CK_FALSE) ||
-                (extractable != NULL && *extractable == CK_FALSE)) {
-                // For non-sensitive keys the exporter isn't necessary,
-                // for non-extractable keys the exporter doesn't work.
-                break;
-            }
-            if (token != NULL && sensitive != NULL && extractable != NULL) {
-                // Non-token, sensitive and extractable key, we need
-                // to prevent an opaque SunPKCS11 P11Key object, which
-                // refrains from obtaining the sensitive attributes.
-                dbg_trace("Extractable key, forcing CKA_SENSITIVE=CK_FALSE "
-                          "to avoid opaque P11Key objects");
-                *sensitive = CK_FALSE;
-                break;
+    if (ret == CKR_OK) {
+        if (cached_attrs_initialized) {
+            dbg_trace("Sensitive attributes were expected");
+            return_with_cleanup(CKR_GENERAL_ERROR);
+        }
+        if (n_attributes >= 3) {
+            CK_BBOOL *token = NULL;
+            CK_BBOOL *sensitive = NULL;
+            CK_BBOOL *extractable = NULL;
+            for (size_t n = 0; n < n_attributes; n++) {
+                get_matching_bool(attributes[n], CKA_TOKEN, token);
+                get_matching_bool(attributes[n], CKA_SENSITIVE, sensitive);
+                get_matching_bool(attributes[n], CKA_EXTRACTABLE, extractable);
+                if (token != NULL && *token == CK_TRUE) {
+                    dbg_trace("Without an NSS DB, CKA_TOKEN should always be "
+                              "CK_FALSE");
+                    return_with_cleanup(CKR_GENERAL_ERROR);
+                }
+                if ((sensitive != NULL && *sensitive == CK_FALSE) ||
+                    (extractable != NULL && *extractable == CK_FALSE)) {
+                    // For non-sensitive keys the exporter isn't necessary,
+                    // for non-extractable keys the exporter doesn't work.
+                    break;
+                }
+                if (token != NULL && sensitive != NULL && extractable != NULL) {
+                    // Non-token, sensitive and extractable key, we need
+                    // to prevent an opaque SunPKCS11 P11Key object, which
+                    // refrains from obtaining the sensitive attributes.
+                    dbg_trace("Extractable key, forcing CKA_SENSITIVE=CK_FALSE "
+                              "to avoid opaque P11Key objects");
+                    *sensitive = CK_FALSE;
+                    break;
+                }
             }
         }
     } else if (ret == CKR_ATTRIBUTE_SENSITIVE) {
+        bool first_call = !cached_attrs_initialized;
+        if (first_call && export_and_store_key_in_tls(key_class, key_type,
+                                                      key_id) != CKR_OK) {
+            return_with_cleanup(CKR_GENERAL_ERROR);
+        }
         CK_ATTRIBUTE_PTR cached_attr = NULL;
         for (size_t n = 0; n < n_attributes; n++) {
             if (attributes[n].ulValueLen == CK_UNAVAILABLE_INFORMATION) {
                 cached_attr = get_sensitive_cached_attr(attributes[n].type);
                 if (cached_attr == NULL) {
                     dbg_trace("Unknown sensitive attribute");
-                    return CKR_GENERAL_ERROR;
+                    return_with_cleanup(CKR_GENERAL_ERROR);
                 }
-                if (attributes[n].pValue == NULL) {
-                    // First call, Java is querying the buffer sizes
-                    if (cached_attr->pValue == NULL) {
-                        ret = export_and_store_key_in_tls(key_class, key_type,
-                                                          key_id);
-                        if (ret != CKR_OK) {
-                            return CKR_GENERAL_ERROR;
-                        }
-                    }
-                    dbg_trace("Changing ulValueLen = CK_UNAVAILABLE_INFORMATION"
-                              " to ulValueLen = %lu",
+                if (first_call) {
+                    // First call, libj2pkcs11 is querying the buffer sizes
+                    dbg_trace("First call, replacing ulValueLen = CK_"
+                              "UNAVAILABLE_INFORMATION with ulValueLen = %lu",
                               cached_attr->ulValueLen);
                     attributes[n].ulValueLen = cached_attr->ulValueLen;
                 } else {
                     // Second call, libj2pkcs11 has allocated the buffers and
                     // is trying to retrieve the attribute values
-                    if (cached_attr->pValue == NULL) {
-                        dbg_trace("No exported key is available to return");
-                        return CKR_GENERAL_ERROR;
-                    }
-                    dbg_trace("Copying pValue %p -> %p",
-                              (void *)cached_attr->pValue,
-                              (void *)attributes[n].pValue);
-                    // NOTE: here we trust that the Java layer only called
-                    // us if it managed to allocate attributes[n].pValue with
-                    // the length we returned in attributes[n].ulValueLen, in
-                    // the previous call. Otherwise, we should check
-                    // attributes[n].ulValueLen before forwarding the call to
-                    // NSS' FC_GetAttributeValue(), which overwrites the
-                    // received value with CK_UNAVAILABLE_INFORMATION.
+                    dbg_trace_attr("Second call, copying previously exported "
+                                   "attribute",
+                                   *cached_attr);
                     attributes[n].ulValueLen = cached_attr->ulValueLen;
                     memcpy(attributes[n].pValue, cached_attr->pValue,
                            attributes[n].ulValueLen);
-                    free(cached_attr->pValue);
-                    cached_attr->pValue = NULL;
-                    cached_attr->ulValueLen = 0;
                 }
             }
         }
         ret = CKR_OK;
+        if (!first_call) {
+            clear_sensitive_cached_attrs();
+        }
+    }
+
+cleanup:
+    if (ret != CKR_OK) {
+        clear_sensitive_cached_attrs();
     }
     return ret;
 }
