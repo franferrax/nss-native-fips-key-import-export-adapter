@@ -44,7 +44,8 @@ static CK_RV encode_secret_key(CK_ATTRIBUTE_PTR attributes,
 
 static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
                                 CK_ULONG n_attributes, CK_KEY_TYPE key_type,
-                                PLArenaPool *arena, SECItem *encoded_key_item) {
+                                PLArenaPool *arena, SECItem *encoded_key_item,
+                                bool *nss_db_attr_present) {
     SECItem *params = NULL;
     CK_ULONG found_attrs = 0;
     SECOidTag alg_tag = SEC_OID_UNKNOWN;
@@ -104,6 +105,9 @@ static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
                 __attr_case(CKA_SUBPRIME, lpk->u.dsa.params.subPrime);
                 __attr_case(CKA_BASE, lpk->u.dsa.params.base);
                 __attr_case(CKA_VALUE, lpk->u.dsa.privateValue);
+            case CKA_NSS_DB:
+                *nss_db_attr_present = true;
+                break;
             default:
                 break;
             }
@@ -140,6 +144,9 @@ static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
             switch (attributes[n].type) {
                 __attr_case(CKA_EC_PARAMS, lpk->u.ec.ecParams.DEREncoding);
                 __attr_case(CKA_VALUE, lpk->u.ec.privateValue);
+            case CKA_NSS_DB:
+                *nss_db_attr_present = true;
+                break;
             default:
                 break;
             }
@@ -183,6 +190,8 @@ CK_RV import_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
                  CK_SESSION_HANDLE session, CK_ATTRIBUTE_PTR attributes,
                  CK_ULONG n_attributes, CK_OBJECT_HANDLE_PTR key_id) {
     CK_RV ret = CKR_OK;
+    CK_ATTRIBUTE_PTR modified_attrs_array = NULL;
+    bool nss_db_attr_present = false;
     PLArenaPool *arena = NULL;
     SECItem encoded_key_item = {0};
     CK_BYTE_PTR encrypted_key = NULL;
@@ -208,7 +217,7 @@ CK_RV import_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
             return_with_cleanup(CKR_HOST_MEMORY);
         }
         ret = encode_private_key(attributes, n_attributes, key_type, arena,
-                                 &encoded_key_item);
+                                 &encoded_key_item, &nss_db_attr_present);
         if (ret != CKR_OK) {
             goto cleanup;
         }
@@ -236,6 +245,23 @@ CK_RV import_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
     }
 
     // Unwrap
+    CK_BYTE zero = 0;
+    if (!nss_db_attr_present && key_class == CKO_PRIVATE_KEY &&
+        (key_type == CKK_DSA || key_type == CKK_EC)) {
+        dbg_trace("Adding CKA_NSS_DB (a.k.a. CKA_NETSCAPE_DB) attribute");
+        modified_attrs_array =
+            malloc((n_attributes + 1) * sizeof(CK_ATTRIBUTE));
+        if (modified_attrs_array == NULL) {
+            return_with_cleanup(CKR_HOST_MEMORY);
+        }
+        memcpy(modified_attrs_array, attributes,
+               n_attributes * sizeof(CK_ATTRIBUTE));
+        modified_attrs_array[n_attributes].type = CKA_NSS_DB;
+        modified_attrs_array[n_attributes].pValue = &zero;
+        modified_attrs_array[n_attributes].ulValueLen = sizeof(zero);
+        attributes = modified_attrs_array;
+        n_attributes++;
+    }
     ret = P11.C_UnwrapKey(session, &IE.mech, IE.key_id, encrypted_key,
                           encrypted_key_len, attributes, n_attributes, key_id);
     dbg_trace("Called C_UnwrapKey() to import the key\n  "
@@ -243,6 +269,9 @@ CK_RV import_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
               *key_id, ret);
 
 cleanup:
+    if (modified_attrs_array != NULL) {
+        free(modified_attrs_array);
+    }
     if (encrypted_key != NULL) {
         zeroize_and_free(encrypted_key, encrypted_key_len);
     }
