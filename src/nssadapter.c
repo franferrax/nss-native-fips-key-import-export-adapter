@@ -42,8 +42,8 @@ static global_data_t global_data = {
 // Copy for the decorated versions of the CK_INTERFACE and CK_FUNCTION_LIST/_3_0
 // structures. We use CK_FUNCTION_LIST_3_0 since it has enough space to hold all
 // the CK_FUNCTION_LIST data, in runtime, one or the other can be present.
-static CK_INTERFACE decoratedInterface = {0};
-static CK_FUNCTION_LIST_3_0 decoratedFunctionList = {0};
+static CK_INTERFACE decorated_interface = {0};
+static CK_FUNCTION_LIST_3_0 decorated_func_list = {0};
 
 inline global_data_t *__get_global_data() {
     return &global_data;
@@ -52,7 +52,7 @@ inline global_data_t *__get_global_data() {
 // Thread-local stored exported attributes, to keep them
 // from one call (querying the buffer sizes) to the other
 // (passing the allocated buffers to get the attributes).
-static __thread CK_ATTRIBUTE cachedAttribute[] = {
+static __thread CK_ATTRIBUTE cached_sensitive_attrs[] = {
     {.type = CKA_VALUE,            .pValue = NULL, .ulValueLen = 0},
     {.type = CKA_PRIVATE_EXPONENT, .pValue = NULL, .ulValueLen = 0},
     {.type = CKA_PRIME_1,          .pValue = NULL, .ulValueLen = 0},
@@ -62,22 +62,22 @@ static __thread CK_ATTRIBUTE cachedAttribute[] = {
     {.type = CKA_COEFFICIENT,      .pValue = NULL, .ulValueLen = 0},
 };
 
-static CK_ATTRIBUTE_PTR getSensitiveCachedAttr(CK_ATTRIBUTE_TYPE type) {
+static CK_ATTRIBUTE_PTR get_sensitive_cached_attr(CK_ATTRIBUTE_TYPE type) {
     switch (type) {
     case CKA_VALUE:
-        return &cachedAttribute[0];
+        return &cached_sensitive_attrs[0];
     case CKA_PRIVATE_EXPONENT:
-        return &cachedAttribute[1];
+        return &cached_sensitive_attrs[1];
     case CKA_PRIME_1:
-        return &cachedAttribute[2];
+        return &cached_sensitive_attrs[2];
     case CKA_PRIME_2:
-        return &cachedAttribute[3];
+        return &cached_sensitive_attrs[3];
     case CKA_EXPONENT_1:
-        return &cachedAttribute[4];
+        return &cached_sensitive_attrs[4];
     case CKA_EXPONENT_2:
-        return &cachedAttribute[5];
+        return &cached_sensitive_attrs[5];
     case CKA_COEFFICIENT:
-        return &cachedAttribute[6];
+        return &cached_sensitive_attrs[6];
     default:
         return NULL;
     }
@@ -103,10 +103,10 @@ CK_RV C_CreateObject(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTemplate,
 
 static CK_RV exportSecretKey(CK_BYTE_PTR *ppEncodedKey,
                              CK_ULONG encodedKeyLen) {
-    CK_ATTRIBUTE_PTR attribute = getSensitiveCachedAttr(CKA_VALUE);
-    attribute->ulValueLen = encodedKeyLen;
-    attribute->pValue = *ppEncodedKey;
-    // Transfer ownership to the above assignation to attribute->pValue:
+    CK_ATTRIBUTE_PTR cached_attr = get_sensitive_cached_attr(CKA_VALUE);
+    cached_attr->ulValueLen = encodedKeyLen;
+    cached_attr->pValue = *ppEncodedKey;
+    // Transfer ownership to the above assignation to cached_attr->pValue:
     *ppEncodedKey = NULL;
     return CKR_OK;
 }
@@ -265,17 +265,17 @@ CK_RV C_GetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
             }
         }
     } else if (ret == CKR_ATTRIBUTE_SENSITIVE) {
-        CK_ATTRIBUTE_PTR cachedAttribute = NULL;
+        CK_ATTRIBUTE_PTR cached_attr = NULL;
         for (CK_ULONG i = 0; i < ulCount; i++) {
             if (isUnavailableInformation(&pTemplate[i])) {
-                cachedAttribute = getSensitiveCachedAttr(pTemplate[i].type);
-                if (cachedAttribute == NULL) {
+                cached_attr = get_sensitive_cached_attr(pTemplate[i].type);
+                if (cached_attr == NULL) {
                     dbg_trace("Unknown sensitive attribute");
                     return CKR_GENERAL_ERROR;
                 }
                 if (pTemplate[i].pValue == NULL) {
                     // First call, Java is querying the buffer sizes
-                    if (cachedAttribute->pValue == NULL) {
+                    if (cached_attr->pValue == NULL) {
                         ret = exportKey(hSession, hObject, pTemplate, ulCount);
                         if (ret != CKR_OK) {
                             return CKR_GENERAL_ERROR;
@@ -283,17 +283,17 @@ CK_RV C_GetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
                     }
                     dbg_trace("Changing ulValueLen = CK_UNAVAILABLE_INFORMATION"
                               " to ulValueLen = %lu",
-                              cachedAttribute->ulValueLen);
-                    pTemplate[i].ulValueLen = cachedAttribute->ulValueLen;
+                              cached_attr->ulValueLen);
+                    pTemplate[i].ulValueLen = cached_attr->ulValueLen;
                 } else {
                     // Second call, Java has allocated the buffers and
                     // is trying to retrieve the attribute values
-                    if (cachedAttribute->pValue == NULL) {
+                    if (cached_attr->pValue == NULL) {
                         dbg_trace("No exported key is available to return");
                         return CKR_GENERAL_ERROR;
                     }
                     dbg_trace("Copying pValue %p -> %p",
-                              (void *)cachedAttribute->pValue,
+                              (void *)cached_attr->pValue,
                               (void *)pTemplate[i].pValue);
                     // NOTE: here we trust that the Java layer only called
                     // us if it managed to allocate pTemplate[i].pValue with
@@ -302,12 +302,12 @@ CK_RV C_GetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
                     // pTemplate[i].ulValueLen before forwarding the call to
                     // NSS' FC_GetAttributeValue(), which overwrites the
                     // received value with CK_UNAVAILABLE_INFORMATION.
-                    pTemplate[i].ulValueLen = cachedAttribute->ulValueLen;
-                    memcpy(pTemplate[i].pValue, cachedAttribute->pValue,
+                    pTemplate[i].ulValueLen = cached_attr->ulValueLen;
+                    memcpy(pTemplate[i].pValue, cached_attr->pValue,
                            pTemplate[i].ulValueLen);
-                    free(cachedAttribute->pValue);
-                    cachedAttribute->pValue = NULL;
-                    cachedAttribute->ulValueLen = 0;
+                    free(cached_attr->pValue);
+                    cached_attr->pValue = NULL;
+                    cached_attr->ulValueLen = 0;
                 }
             }
         }
@@ -320,7 +320,7 @@ CK_RV C_GetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
  * Initialization
  * ****************************************************************************/
 
-CK_RV initializeImporterExporter() {
+CK_RV initialize_importer_exporter() {
     if (IE.key_id != CK_INVALID_HANDLE) {
         // Already initialized
         return CKR_OK;
@@ -372,11 +372,11 @@ CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
     if (ret == CKR_OK) {
         // After loading this native library, the SunPKCS11 constructor calls
         // PKCS11::getInstance(), which is a synchronized method. This method
-        // invokes C_Initialize(), so by calling initializeImporterExporter()
+        // invokes C_Initialize(), so by calling initialize_importer_exporter()
         // at this point (inside the C_Initialize() implementation), we are
-        // guaranteed that the importer/exporter initialization will not be
+        // guaranteed that the importer / exporter initialization will not be
         // concurrently executed.
-        if (initializeImporterExporter() != CKR_OK) {
+        if (initialize_importer_exporter() != CKR_OK) {
             ret = CKR_GENERAL_ERROR;
         }
     }
@@ -402,9 +402,9 @@ EXPORTED_FUNCTION CK_RV C_GetInterface(CK_UTF8CHAR_PTR pInterfaceName,
         dbg_trace("Only the default interface is supported by this adapter");
         return CKR_GENERAL_ERROR;
     }
-    if (decoratedInterface.pFunctionList == &decoratedFunctionList) {
+    if (decorated_interface.pFunctionList == &decorated_func_list) {
         // Already initialized
-        *ppInterface = &decoratedInterface;
+        *ppInterface = &decorated_interface;
         return CKR_OK;
     }
 
@@ -415,19 +415,19 @@ EXPORTED_FUNCTION CK_RV C_GetInterface(CK_UTF8CHAR_PTR pInterfaceName,
         CK_VERSION_PTR version = (*ppInterface)->pFunctionList;
 
         // Clone returned structures
-        memcpy(&decoratedInterface, *ppInterface, sizeof(decoratedInterface));
-        memcpy(&decoratedFunctionList, global_data.orig_funcs_list,
+        memcpy(&decorated_interface, *ppInterface, sizeof(decorated_interface));
+        memcpy(&decorated_func_list, global_data.orig_funcs_list,
                version->major == 3 ? sizeof(CK_FUNCTION_LIST_3_0)
                                    : sizeof(CK_FUNCTION_LIST));
 
         // Decorate functions
-        decoratedFunctionList.C_CreateObject = C_CreateObject;
-        decoratedFunctionList.C_GetAttributeValue = C_GetAttributeValue;
-        decoratedFunctionList.C_Initialize = C_Initialize;
+        decorated_func_list.C_CreateObject = C_CreateObject;
+        decorated_func_list.C_GetAttributeValue = C_GetAttributeValue;
+        decorated_func_list.C_Initialize = C_Initialize;
 
         // Update pointers
-        decoratedInterface.pFunctionList = &decoratedFunctionList;
-        *ppInterface = &decoratedInterface;
+        decorated_interface.pFunctionList = &decorated_func_list;
+        *ppInterface = &decorated_interface;
         dbg_trace("NSS PKCS #11 v%d.%d, software token successfully adapted",
                   version->major, version->minor);
     }
