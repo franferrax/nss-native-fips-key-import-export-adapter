@@ -21,18 +21,22 @@
 #define CKO_FMT             __grep_able(CKO)
 #define CKR_FMT             __grep_able(CKR)
 
-#define dbg_trace_attr(attr)                                                   \
+// Log a CK_ATTRIBUTE with all its fields and data
+#define dbg_trace_attr(message, attr)                                          \
     do {                                                                       \
-        dbg_trace((attr) == NULL                                               \
-                      ? "ATTR: NULL"                                           \
-                      : ((attr)->ulValueLen == CK_UNAVAILABLE_INFORMATION      \
-                             ? "ATTR: type = " CKA_FMT ", pValue = %p, "       \
-                               "ulValueLen = CK_UNAVAILABLE_INFORMATION"       \
-                             : "ATTR: type = " CKA_FMT ", pValue = %p, "       \
-                               "ulValueLen = %lu"),                            \
-                  (attr) == NULL ? 0 : (attr)->type,                           \
-                  (attr) == NULL ? 0 : (void *)(attr)->pValue,                 \
-                  (attr) == NULL ? 0 : (attr)->ulValueLen);                    \
+        if (dbg_is_enabled()) {                                                \
+            if ((attr).ulValueLen == CK_UNAVAILABLE_INFORMATION) {             \
+                dbg_trace("%s:\n  type = " CKA_FMT ", pValue = %p, "           \
+                          "ulValueLen = CK_UNAVAILABLE_INFORMATION",           \
+                          (message), (attr).type, (attr).pValue);              \
+            } else {                                                           \
+                dbg_trace("%s:\n  type = " CKA_FMT ", pValue = %p, "           \
+                          "ulValueLen = %lu",                                  \
+                          (message), (attr).type, (attr).pValue,               \
+                          (attr).ulValueLen);                                  \
+                dbg_trace_hex((attr).pValue, (attr).ulValueLen);               \
+            }                                                                  \
+        }                                                                      \
     } while (0)
 
 // Handle the convention described in PKCS #11 Section 5.2 on producing output

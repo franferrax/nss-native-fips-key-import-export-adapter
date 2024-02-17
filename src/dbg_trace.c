@@ -64,6 +64,20 @@ void dbg_finalize() {
     }
 }
 
+// Logs a simple hex-dump like representation of the input buffer
+void dbg_trace_hex(const unsigned char *const buf, size_t len) {
+    if (dbg_is_enabled() && buf != NULL && len > 0) {
+        fputc(' ', dbg_file);
+        for (size_t n = 0; n < len; n++) {
+            if (n != 0 && n % 8 == 0) {
+                fprintf(dbg_file, n % 32 == 0 ? "\n " : "  ");
+            }
+            fprintf(dbg_file, " %02X", buf[n]);
+        }
+        __dbg_new_line_and_flush();
+    }
+}
+
 FILE *__dbg_file() {
     return dbg_file;
 }

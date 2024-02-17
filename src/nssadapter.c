@@ -219,7 +219,8 @@ CK_RV C_GetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
               ret, hSession, hObject, (void *)pTemplate, ulCount);
     if (dbg_is_enabled()) {
         for (CK_ULONG i = 0; i < ulCount; i++) {
-            dbg_trace_attr(&pTemplate[i]);
+            dbg_trace_attr("Attribute returned by NSS C_GetAttributeValue()",
+                           pTemplate[i]);
         }
     }
     if (ret == CKR_OK && ulCount >= 3) {

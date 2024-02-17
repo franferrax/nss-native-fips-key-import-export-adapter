@@ -16,6 +16,7 @@ void __dbg_trace_header(const char *file, const unsigned int line,
 void dbg_initialize();
 bool dbg_is_enabled();
 void dbg_finalize();
+void dbg_trace_hex(const unsigned char *const buf, size_t len);
 
 #define dbg_trace(...)                                                         \
     do {                                                                       \
