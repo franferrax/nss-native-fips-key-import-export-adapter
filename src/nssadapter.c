@@ -81,10 +81,9 @@ CK_RV C_CreateObject(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTemplate,
                      CK_ULONG ulCount, CK_OBJECT_HANDLE_PTR phObject) {
     CK_RV ret = o->C_CreateObject(hSession, pTemplate, ulCount, phObject);
     dbg_trace("Forwarded to original function (returned " CKR_FMT "), "
-              "parameters:\nhSession = " HEX32 ", pTemplate = " HEX64
-              ", ulCount = %lu, phObject = " HEX64,
-              ret, hSession, (uintptr_t)pTemplate, ulCount,
-              (uintptr_t)phObject);
+              "parameters:\nhSession = 0x%08lx, pTemplate = %p, "
+              "ulCount = %lu, phObject = %p",
+              ret, hSession, (void *)pTemplate, ulCount, (void *)phObject);
     return ret;
 }
 
@@ -215,9 +214,9 @@ CK_RV C_GetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
                           CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount) {
     CK_RV ret = o->C_GetAttributeValue(hSession, hObject, pTemplate, ulCount);
     dbg_trace("Forwarded to original function (returned " CKR_FMT "), "
-              "parameters:\nhSession = " HEX32
-              ", hObject = %lu, pTemplate = " HEX64 ", ulCount = %lu",
-              ret, hSession, hObject, (uintptr_t)pTemplate, ulCount);
+              "parameters:\nhSession = 0x%08lx, hObject = %lu, "
+              "pTemplate = %p, ulCount = %lu",
+              ret, hSession, hObject, (void *)pTemplate, ulCount);
     if (dbg_is_enabled()) {
         for (CK_ULONG i = 0; i < ulCount; i++) {
             dbg_trace_attr(&pTemplate[i]);
@@ -282,9 +281,9 @@ CK_RV C_GetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
                         dbg_trace("No exported key is available to return");
                         return CKR_GENERAL_ERROR;
                     }
-                    dbg_trace("Copying pValue " HEX64 " -> " HEX64,
-                              (uintptr_t)cachedAttribute->pValue,
-                              (uintptr_t)pTemplate[i].pValue);
+                    dbg_trace("Copying pValue %p -> %p",
+                              (void *)cachedAttribute->pValue,
+                              (void *)pTemplate[i].pValue);
                     // NOTE: here we trust that the Java layer only called
                     // us if it managed to allocate pTemplate[i].pValue with
                     // the length we returned in pTemplate[i].ulValueLen, in
@@ -356,8 +355,8 @@ CK_RV initializeImporterExporter() {
 CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
     CK_RV ret = o->C_Initialize(pInitArgs);
     dbg_trace("Forwarded to original function (returned " CKR_FMT "), "
-              "pInitArgs = " HEX64,
-              ret, (uintptr_t)pInitArgs);
+              "pInitArgs = %p",
+              ret, (void *)pInitArgs);
     if (ret == CKR_OK) {
         // After loading this native library, the SunPKCS11 constructor calls
         // PKCS11::getInstance(), which is a synchronized method. This method
@@ -379,10 +378,9 @@ CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
 WITH_FIPS_PROTOTYPE(CK_RV, C_GetInterface, CK_UTF8CHAR_PTR pInterfaceName,
                     CK_VERSION_PTR pVersion, CK_INTERFACE_PTR_PTR ppInterface,
                     CK_FLAGS flags) {
-    dbg_trace("Parameters:\npInterfaceName = \"%s\", pVersion = " HEX64
-              ", ppInterface = " HEX64 ", flags = %lu",
-              pInterfaceName, (uintptr_t)pVersion, (uintptr_t)ppInterface,
-              flags);
+    dbg_trace("Parameters:\npInterfaceName = \"%s\", pVersion = %p, "
+              "ppInterface = %p, flags = %lu",
+              pInterfaceName, (void *)pVersion, (void *)ppInterface, flags);
     if (pInterfaceName != NULL) {
         dbg_trace("Only the default interface is supported by this adapter");
         return CKR_GENERAL_ERROR;
@@ -422,8 +420,8 @@ WITH_FIPS_PROTOTYPE(CK_RV, C_GetInterface, CK_UTF8CHAR_PTR pInterfaceName,
 WITH_FIPS_PROTOTYPE(CK_RV, C_GetFunctionList,
                     CK_FUNCTION_LIST_PTR_PTR ppFunctionList) {
     dbg_trace("Only the C_GetInterface() API is supported by this adapter "
-              "(ppFunctionList = " HEX64 ")",
-              (uintptr_t)ppFunctionList);
+              "(ppFunctionList = %p)",
+              (void *)ppFunctionList);
     *ppFunctionList = NULL;
     return CKR_GENERAL_ERROR;
 }
@@ -437,8 +435,9 @@ static void CONSTRUCTOR_FUNCTION library_constructor(void) {
 }
 
 static void DESTRUCTOR_FUNCTION library_destructor(void) {
-    // Destroy import/export key, if created
+    // Destroy import / export key, if created
     if (ieKeySession != CK_INVALID_HANDLE) {
         o->C_CloseSession(ieKeySession);
     }
+    dbg_finalize();
 }

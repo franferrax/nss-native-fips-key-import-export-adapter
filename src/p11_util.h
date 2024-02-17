@@ -15,7 +15,7 @@
 // Qualify the printed value with its macro prefix, so we can copy the printed
 // REGEX and execute `grep -irE "^\s*#define\s+$(xclip -sel clip)" /usr/include`
 // to know the defined value
-#define __grep_able(prefix) #prefix "_.*" HEX32
+#define __grep_able(prefix) #prefix "_.*0x%08lx"
 #define CKA_FMT             __grep_able(CKA)
 #define CKK_FMT             __grep_able(CKK)
 #define CKO_FMT             __grep_able(CKO)
@@ -26,12 +26,12 @@
         dbg_trace((attr) == NULL                                               \
                       ? "ATTR: NULL"                                           \
                       : ((attr)->ulValueLen == CK_UNAVAILABLE_INFORMATION      \
-                             ? "ATTR: type = " CKA_FMT ", pValue = " HEX64     \
-                               ", ulValueLen = CK_UNAVAILABLE_INFORMATION"     \
-                             : "ATTR: type = " CKA_FMT ", pValue = " HEX64     \
-                               ", ulValueLen = %lu"),                          \
+                             ? "ATTR: type = " CKA_FMT ", pValue = %p, "       \
+                               "ulValueLen = CK_UNAVAILABLE_INFORMATION"       \
+                             : "ATTR: type = " CKA_FMT ", pValue = %p, "       \
+                               "ulValueLen = %lu"),                            \
                   (attr) == NULL ? 0 : (attr)->type,                           \
-                  (attr) == NULL ? 0 : (uintptr_t)(attr)->pValue,              \
+                  (attr) == NULL ? 0 : (void *)(attr)->pValue,                 \
                   (attr) == NULL ? 0 : (attr)->ulValueLen);                    \
     } while (0)
 
