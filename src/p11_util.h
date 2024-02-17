@@ -3,7 +3,9 @@
 #ifndef P11_UTIL_H
 #define P11_UTIL_H
 
+#include "nssadapter.h"
 #include <nss3/pkcs11.h>
+#include <stdbool.h>
 
 #define FIPS_SLOT_ID 3
 
@@ -50,41 +52,32 @@
         ret = api(__VA_ARGS__, pData, &dataLen);                               \
     } while (0)
 
-static inline CK_RV getKeyType(CK_SESSION_HANDLE hSession,
-                               CK_OBJECT_HANDLE hObject,
-                               CK_OBJECT_CLASS *pKeyClass,
-                               CK_KEY_TYPE *pKeyType) {
+static inline bool isImportableExportable(CK_OBJECT_CLASS keyClass,
+                                          CK_KEY_TYPE keyType) {
+    // NOTE: see OPENJDK-824 for reasons behind skipping DH keys
+    return keyClass == CKO_SECRET_KEY ||
+           (keyClass == CKO_PRIVATE_KEY &&
+            (keyType == CKK_RSA || keyType == CKK_DSA || keyType == CKK_EC));
+}
+
+static inline bool getKeyType(CK_SESSION_HANDLE hSession,
+                              CK_OBJECT_HANDLE hObject,
+                              CK_OBJECT_CLASS *pKeyClass,
+                              CK_KEY_TYPE *pKeyType) {
     CK_ATTRIBUTE attrs[] = {
-        {
-         .type = CKA_CLASS,
-         .pValue = pKeyClass,
-         .ulValueLen = sizeof(CK_OBJECT_CLASS),
-         },
-        {
-         .type = CKA_KEY_TYPE,
-         .pValue = pKeyType,
-         .ulValueLen = sizeof(CK_KEY_TYPE),
-         },
+        {CKA_CLASS,    pKeyClass, sizeof(CK_OBJECT_CLASS)},
+        {CKA_KEY_TYPE, pKeyType,  sizeof(CK_KEY_TYPE)    },
     };
     CK_RV ret = P11.C_GetAttributeValue(hSession, hObject, attrs,
                                         sizeof(attrs) / sizeof(CK_ATTRIBUTE));
     if (ret == CKR_OK) {
-        dbg_trace("key ID = %lu, key class = " CKO_FMT ", key type = " CKK_FMT,
+        dbg_trace("key: id = %lu, class = " CKO_FMT ", type = " CKK_FMT,
                   hObject, *pKeyClass, *pKeyType);
+        return true;
     } else {
-        dbg_trace("C_GetAttributeValue call failed with " CKR_FMT, ret);
+        dbg_trace("C_GetAttributeValue call failed with ret = " CKR_FMT, ret);
+        return false;
     }
-    return ret;
-}
-
-static inline CK_BBOOL isKeyType(CK_SESSION_HANDLE hSession,
-                                 CK_OBJECT_HANDLE hObject,
-                                 CK_OBJECT_CLASS expectedClass,
-                                 CK_KEY_TYPE expectedType) {
-    CK_OBJECT_CLASS kClass;
-    CK_KEY_TYPE kType;
-    return getKeyType(hSession, hObject, &kClass, &kType) == CKR_OK &&
-           kClass == expectedClass && kType == expectedType;
 }
 
 static inline void getBBoolAttr(CK_ATTRIBUTE_PTR attr,
