@@ -69,8 +69,8 @@ CK_RV C_GetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
                           CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount) {
     CK_OBJECT_CLASS keyClass = (CK_OBJECT_CLASS)-1;
     CK_KEY_TYPE keyType = (CK_KEY_TYPE)-1;
-    if (!getKeyType(hSession, hObject, &keyClass, &keyType) ||
-        !isImportableExportable(keyClass, keyType)) {
+    if (!get_key_type_from_object(hSession, hObject, &keyClass, &keyType) ||
+        !is_importable_exportable(keyClass, keyType)) {
         dbg_trace("There is no support for exporting this key, forwarding to "
                   "NSS\n  hSession = 0x%08lx, hObject = %lu, pTemplate = %p, "
                   "ulCount = %lu",
@@ -111,19 +111,20 @@ static CK_RV initialize_importer_exporter() {
         return ret;
     }
 
-    CK_OBJECT_CLASS kClass = CKO_SECRET_KEY;
-    CK_ULONG kLen = 256 >> 3;
+    // Create importer / exporter key
+    CK_OBJECT_CLASS keyClass = CKO_SECRET_KEY;
+    CK_ULONG keyLen = 256 >> 3;
     CK_MECHANISM mechanisms[] = {
-        {.mechanism = CKM_AES_KEY_GEN, .pParameter = NULL, .ulParameterLen = 0},
+        {CKM_AES_KEY_GEN, NULL, 0},
     };
     CK_ATTRIBUTE attributes[] = {
-        {.type = CKA_CLASS,     .pValue = &kClass, .ulValueLen = sizeof(kClass)},
-        {.type = CKA_VALUE_LEN, .pValue = &kLen,   .ulValueLen = sizeof(kLen)  },
+        {CKA_CLASS,     &keyClass, sizeof(keyClass)},
+        {CKA_VALUE_LEN, &keyLen,   sizeof(keyLen)  },
     };
     ret = P11.C_GenerateKey(IE.session, mechanisms, attributes,
                             sizeof(attributes) / sizeof(CK_ATTRIBUTE),
                             &IE.key_id);
-    dbg_trace("Called C_GenerateKey() to create the import/export key "
+    dbg_trace("Called C_GenerateKey() to create the import / export key "
               "(returned " CKR_FMT ")",
               ret);
     return ret;

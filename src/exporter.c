@@ -12,16 +12,17 @@
 // from one call (querying the buffer sizes) to the other
 // (passing the allocated buffers to get the attributes).
 static __thread CK_ATTRIBUTE cached_sensitive_attrs[] = {
-    {.type = CKA_VALUE,            .pValue = NULL, .ulValueLen = 0},
-    {.type = CKA_PRIVATE_EXPONENT, .pValue = NULL, .ulValueLen = 0},
-    {.type = CKA_PRIME_1,          .pValue = NULL, .ulValueLen = 0},
-    {.type = CKA_PRIME_2,          .pValue = NULL, .ulValueLen = 0},
-    {.type = CKA_EXPONENT_1,       .pValue = NULL, .ulValueLen = 0},
-    {.type = CKA_EXPONENT_2,       .pValue = NULL, .ulValueLen = 0},
-    {.type = CKA_COEFFICIENT,      .pValue = NULL, .ulValueLen = 0},
+    {CKA_VALUE,            NULL, 0},
+    {CKA_PRIVATE_EXPONENT, NULL, 0},
+    {CKA_PRIME_1,          NULL, 0},
+    {CKA_PRIME_2,          NULL, 0},
+    {CKA_EXPONENT_1,       NULL, 0},
+    {CKA_EXPONENT_2,       NULL, 0},
+    {CKA_COEFFICIENT,      NULL, 0},
 };
 
-static CK_ATTRIBUTE_PTR get_sensitive_cached_attr(CK_ATTRIBUTE_TYPE type) {
+static inline CK_ATTRIBUTE_PTR
+get_sensitive_cached_attr(CK_ATTRIBUTE_TYPE type) {
     switch (type) {
     case CKA_VALUE:
         return &cached_sensitive_attrs[0];
@@ -42,99 +43,106 @@ static CK_ATTRIBUTE_PTR get_sensitive_cached_attr(CK_ATTRIBUTE_TYPE type) {
     }
 }
 
-static CK_RV exportSecretKey(CK_BYTE_PTR *ppEncodedKey,
-                             CK_ULONG encodedKeyLen) {
+static CK_RV decode_and_store_secret_key(CK_BYTE_PTR *encoded_key,
+                                         CK_ULONG encoded_key_len) {
     CK_ATTRIBUTE_PTR cached_attr = get_sensitive_cached_attr(CKA_VALUE);
-    cached_attr->ulValueLen = encodedKeyLen;
-    cached_attr->pValue = *ppEncodedKey;
+    cached_attr->ulValueLen = encoded_key_len;
+    cached_attr->pValue = *encoded_key;
     // Transfer ownership to the above assignation to cached_attr->pValue:
-    *ppEncodedKey = NULL;
+    *encoded_key = NULL;
     return CKR_OK;
 }
 
-static CK_RV exportRSAPrivateKey(CK_BYTE_PTR pEncodedKey,
-                                 CK_ULONG encodedKeyLen,
-                                 CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount) {
-    dbg_trace("pEncodedKey = %p, encodedKeyLen = %lu, pTemplate = %p, "
-              "ulCount = %lu",
-              (void *)pEncodedKey, encodedKeyLen, (void *)pTemplate, ulCount);
+static CK_RV export_rsa_private_key(CK_BYTE_PTR encoded_key,
+                                    CK_ULONG encoded_key_len,
+                                    CK_ATTRIBUTE_PTR attributes,
+                                    CK_ULONG n_attributes) {
+    dbg_trace("encoded_key = %p, encoded_key_len = %lu, attributes = %p, "
+              "n_attributes = %lu",
+              (void *)encoded_key, encoded_key_len, (void *)attributes,
+              n_attributes);
     // TODO: implement
     return CKR_GENERAL_ERROR;
 }
 
-static CK_RV exportDSAPrivateKey(CK_BYTE_PTR pEncodedKey,
-                                 CK_ULONG encodedKeyLen,
-                                 CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount) {
-    dbg_trace("pEncodedKey = %p, encodedKeyLen = %lu, pTemplate = %p, "
-              "ulCount = %lu",
-              (void *)pEncodedKey, encodedKeyLen, (void *)pTemplate, ulCount);
+static CK_RV export_dsa_private_key(CK_BYTE_PTR encoded_key,
+                                    CK_ULONG encoded_key_len,
+                                    CK_ATTRIBUTE_PTR attributes,
+                                    CK_ULONG n_attributes) {
+    dbg_trace("encoded_key = %p, encoded_key_len = %lu, attributes = %p, "
+              "n_attributes = %lu",
+              (void *)encoded_key, encoded_key_len, (void *)attributes,
+              n_attributes);
     // TODO: implement
     return CKR_GENERAL_ERROR;
 }
 
-static CK_RV exportECPrivateKey(CK_BYTE_PTR pEncodedKey, CK_ULONG encodedKeyLen,
-                                CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount) {
-    dbg_trace("pEncodedKey = %p, encodedKeyLen = %lu, pTemplate = %p, "
-              "ulCount = %lu",
-              (void *)pEncodedKey, encodedKeyLen, (void *)pTemplate, ulCount);
+static CK_RV export_ec_private_key(CK_BYTE_PTR encoded_key,
+                                   CK_ULONG encoded_key_len,
+                                   CK_ATTRIBUTE_PTR attributes,
+                                   CK_ULONG n_attributes) {
+    dbg_trace("encoded_key = %p, encoded_key_len = %lu, attributes = %p, "
+              "n_attributes = %lu",
+              (void *)encoded_key, encoded_key_len, (void *)attributes,
+              n_attributes);
     // TODO: implement
     return CKR_GENERAL_ERROR;
 }
 
-static CK_RV exportAndStoreKeyInTLS(CK_OBJECT_CLASS keyClass,
-                                    CK_KEY_TYPE keyType,
-                                    CK_OBJECT_HANDLE hObject,
-                                    CK_ATTRIBUTE_PTR pTemplate,
-                                    CK_ULONG ulCount) {
+static CK_RV export_and_store_key_in_tls(CK_OBJECT_CLASS key_class,
+                                         CK_KEY_TYPE key_type,
+                                         CK_OBJECT_HANDLE key_id,
+                                         CK_ATTRIBUTE_PTR attributes,
+                                         CK_ULONG n_attributes) {
     CK_RV ret = CKR_OK;
-    CK_BYTE_PTR pEncodedKey = NULL;
-    CK_ULONG encodedKeyLen = 0;
-    CK_BYTE_PTR pEncryptedKey = NULL;
-    CK_ULONG encryptedKeyLen = 0;
+    CK_BYTE_PTR encoded_key = NULL;
+    CK_ULONG encoded_key_len = 0;
+    CK_BYTE_PTR encrypted_key = NULL;
+    CK_ULONG encrypted_key_len = 0;
 
     // Wrap
-    ALLOCATION_IDIOM(P11.C_WrapKey, pEncryptedKey, encryptedKeyLen, IE.session,
-                     &IE.mech, IE.key_id, hObject);
+    p11_allocation_idiom(P11.C_WrapKey, encrypted_key, encrypted_key_len,
+                         IE.session, &IE.mech, IE.key_id, key_id);
     dbg_trace("Called C_WrapKey() to export the key (returned " CKR_FMT
               "), wrapped key len = %lu",
-              ret, encryptedKeyLen);
+              ret, encrypted_key_len);
     if (ret != CKR_OK) {
-        goto end;
+        goto cleanup;
     }
 
     // Decrypt
     ret = P11.C_DecryptInit(IE.session, &IE.mech, IE.key_id);
     if (ret != CKR_OK) {
         dbg_trace("C_DecryptInit has failed with " CKR_FMT, ret);
-        goto end;
+        goto cleanup;
     }
-    ALLOCATION_IDIOM(P11.C_Decrypt, pEncodedKey, encodedKeyLen, IE.session,
-                     pEncryptedKey, encryptedKeyLen);
+    p11_allocation_idiom(P11.C_Decrypt, encoded_key, encoded_key_len,
+                         IE.session, encrypted_key, encrypted_key_len);
     dbg_trace("Called C_Decrypt() to export the key (returned " CKR_FMT
               "), encoded key len = %lu",
-              ret, encodedKeyLen);
+              ret, encoded_key_len);
     if (ret != CKR_OK) {
-        goto end;
+        goto cleanup;
     }
 
     // Decode and fix attributes template
-    switch (keyClass) {
+    switch (key_class) {
     case CKO_SECRET_KEY:
-        ret = exportSecretKey(&pEncodedKey, encodedKeyLen);
+        ret = decode_and_store_secret_key(&encoded_key, encoded_key_len);
         break;
     case CKO_PRIVATE_KEY:
-        switch (keyType) {
+        switch (key_type) {
         case CKK_RSA:
-            ret = exportRSAPrivateKey(pEncodedKey, encodedKeyLen, pTemplate,
-                                      ulCount);
+            ret = export_rsa_private_key(encoded_key, encoded_key_len,
+                                         attributes, n_attributes);
             break;
         case CKK_DSA:
-            ret = exportDSAPrivateKey(pEncodedKey, encodedKeyLen, pTemplate,
-                                      ulCount);
+            ret = export_dsa_private_key(encoded_key, encoded_key_len,
+                                         attributes, n_attributes);
             break;
         case CKK_EC:
-            ret = exportECPrivateKey(pEncodedKey, encodedKeyLen, pTemplate,
-                                     ulCount);
+            ret = export_ec_private_key(encoded_key, encoded_key_len,
+                                        attributes, n_attributes);
             break;
         default:
             dbg_trace("Unknown key type");
@@ -147,38 +155,39 @@ static CK_RV exportAndStoreKeyInTLS(CK_OBJECT_CLASS keyClass,
         ret = CKR_GENERAL_ERROR;
         break;
     }
-end:
-    if (pEncryptedKey != NULL) {
-        free(pEncryptedKey);
+cleanup:
+    if (encrypted_key != NULL) {
+        free(encrypted_key);
     }
-    if (pEncodedKey != NULL) {
-        free(pEncodedKey);
+    if (encoded_key != NULL) {
+        free(encoded_key);
     }
     return ret;
 }
 
-CK_RV export_key(CK_OBJECT_CLASS keyClass, CK_KEY_TYPE keyType,
-                 CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
-                 CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount) {
-    CK_RV ret = P11.C_GetAttributeValue(hSession, hObject, pTemplate, ulCount);
+CK_RV export_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
+                 CK_SESSION_HANDLE session, CK_OBJECT_HANDLE key_id,
+                 CK_ATTRIBUTE_PTR attributes, CK_ULONG n_attributes) {
+    CK_RV ret =
+        P11.C_GetAttributeValue(session, key_id, attributes, n_attributes);
     dbg_trace("Forwarded to original function (returned " CKR_FMT "), "
-              "parameters:\nhSession = 0x%08lx, hObject = %lu, "
-              "pTemplate = %p, ulCount = %lu",
-              ret, hSession, hObject, (void *)pTemplate, ulCount);
+              "parameters:\nsession = 0x%08lx, key_id = %lu, "
+              "attributes = %p, n_attributes = %lu",
+              ret, session, key_id, (void *)attributes, n_attributes);
     if (dbg_is_enabled()) {
-        for (CK_ULONG i = 0; i < ulCount; i++) {
+        for (size_t n = 0; n < n_attributes; n++) {
             dbg_trace_attr("Attribute returned by NSS C_GetAttributeValue()",
-                           pTemplate[i]);
+                           attributes[n]);
         }
     }
-    if (ret == CKR_OK && ulCount >= 3) {
+    if (ret == CKR_OK && n_attributes >= 3) {
         CK_BBOOL *token = NULL;
         CK_BBOOL *sensitive = NULL;
         CK_BBOOL *extractable = NULL;
-        for (CK_ULONG i = 0; i < ulCount; i++) {
-            getBBoolAttr(&pTemplate[i], CKA_TOKEN, &token);
-            getBBoolAttr(&pTemplate[i], CKA_SENSITIVE, &sensitive);
-            getBBoolAttr(&pTemplate[i], CKA_EXTRACTABLE, &extractable);
+        for (size_t n = 0; n < n_attributes; n++) {
+            get_matching_bool(&attributes[n], CKA_TOKEN, &token);
+            get_matching_bool(&attributes[n], CKA_SENSITIVE, &sensitive);
+            get_matching_bool(&attributes[n], CKA_EXTRACTABLE, &extractable);
             if (token != NULL && *token == CK_TRUE) {
                 dbg_trace("Without an NSS DB, CKA_TOKEN should always be "
                           "CK_FALSE");
@@ -192,7 +201,7 @@ CK_RV export_key(CK_OBJECT_CLASS keyClass, CK_KEY_TYPE keyType,
             }
             if (token != NULL && sensitive != NULL && extractable != NULL) {
                 // Non-token, sensitive and extractable key:
-                if (!(keyClass == CKO_PRIVATE_KEY && keyType == CKK_DH)) {
+                if (!(key_class == CKO_PRIVATE_KEY && key_type == CKK_DH)) {
                     // See OPENJDK-824 for reasons behind skipping DH keys
                     dbg_trace("Forcing extractable key to be non-sensitive, "
                               "to prevent an opaque Java key object, which "
@@ -204,18 +213,19 @@ CK_RV export_key(CK_OBJECT_CLASS keyClass, CK_KEY_TYPE keyType,
         }
     } else if (ret == CKR_ATTRIBUTE_SENSITIVE) {
         CK_ATTRIBUTE_PTR cached_attr = NULL;
-        for (CK_ULONG i = 0; i < ulCount; i++) {
-            if (isUnavailableInformation(&pTemplate[i])) {
-                cached_attr = get_sensitive_cached_attr(pTemplate[i].type);
+        for (size_t n = 0; n < n_attributes; n++) {
+            if (isUnavailableInformation(&attributes[n])) {
+                cached_attr = get_sensitive_cached_attr(attributes[n].type);
                 if (cached_attr == NULL) {
                     dbg_trace("Unknown sensitive attribute");
                     return CKR_GENERAL_ERROR;
                 }
-                if (pTemplate[i].pValue == NULL) {
+                if (attributes[n].pValue == NULL) {
                     // First call, Java is querying the buffer sizes
                     if (cached_attr->pValue == NULL) {
-                        ret = exportAndStoreKeyInTLS(keyClass, keyType, hObject,
-                                                     pTemplate, ulCount);
+                        ret = export_and_store_key_in_tls(key_class, key_type,
+                                                          key_id, attributes,
+                                                          n_attributes);
                         if (ret != CKR_OK) {
                             return CKR_GENERAL_ERROR;
                         }
@@ -223,7 +233,7 @@ CK_RV export_key(CK_OBJECT_CLASS keyClass, CK_KEY_TYPE keyType,
                     dbg_trace("Changing ulValueLen = CK_UNAVAILABLE_INFORMATION"
                               " to ulValueLen = %lu",
                               cached_attr->ulValueLen);
-                    pTemplate[i].ulValueLen = cached_attr->ulValueLen;
+                    attributes[n].ulValueLen = cached_attr->ulValueLen;
                 } else {
                     // Second call, Java has allocated the buffers and
                     // is trying to retrieve the attribute values
@@ -233,17 +243,17 @@ CK_RV export_key(CK_OBJECT_CLASS keyClass, CK_KEY_TYPE keyType,
                     }
                     dbg_trace("Copying pValue %p -> %p",
                               (void *)cached_attr->pValue,
-                              (void *)pTemplate[i].pValue);
+                              (void *)attributes[n].pValue);
                     // NOTE: here we trust that the Java layer only called
-                    // us if it managed to allocate pTemplate[i].pValue with
-                    // the length we returned in pTemplate[i].ulValueLen, in
+                    // us if it managed to allocate attributes[n].pValue with
+                    // the length we returned in attributes[n].ulValueLen, in
                     // the previous call. Otherwise, we should check
-                    // pTemplate[i].ulValueLen before forwarding the call to
+                    // attributes[n].ulValueLen before forwarding the call to
                     // NSS' FC_GetAttributeValue(), which overwrites the
                     // received value with CK_UNAVAILABLE_INFORMATION.
-                    pTemplate[i].ulValueLen = cached_attr->ulValueLen;
-                    memcpy(pTemplate[i].pValue, cached_attr->pValue,
-                           pTemplate[i].ulValueLen);
+                    attributes[n].ulValueLen = cached_attr->ulValueLen;
+                    memcpy(attributes[n].pValue, cached_attr->pValue,
+                           attributes[n].ulValueLen);
                     free(cached_attr->pValue);
                     cached_attr->pValue = NULL;
                     cached_attr->ulValueLen = 0;

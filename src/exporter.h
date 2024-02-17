@@ -6,8 +6,8 @@
 #include "nssadapter.h"
 #include <nss3/pkcs11.h>
 
-CK_RV export_key(CK_OBJECT_CLASS keyClass, CK_KEY_TYPE keyType,
-                 CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
-                 CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount);
+CK_RV export_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
+                 CK_SESSION_HANDLE session, CK_OBJECT_HANDLE key_id,
+                 CK_ATTRIBUTE_PTR attributes, CK_ULONG n_attributes);
 
 #endif // EXPORTER_H

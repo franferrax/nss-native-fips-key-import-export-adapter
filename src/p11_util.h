@@ -36,43 +36,43 @@
         }                                                                      \
     } while (0)
 
-// Handle the convention described in PKCS #11 Section 5.2 on producing output
-#define ALLOCATION_IDIOM(api, pData, dataLen, ...)                             \
+// Handle convention described in PKCS #11 v3.0 Section 5.2 on producing output
+#define p11_allocation_idiom(P11_Func, data, data_len, ...)                    \
     do {                                                                       \
-        ret = api(__VA_ARGS__, NULL, &dataLen);                                \
+        ret = P11_Func(__VA_ARGS__, NULL, &(data_len));                        \
         if (ret != CKR_OK) {                                                   \
-            dbg_trace(#api "() has failed with " CKR_FMT, ret);                \
-            goto end;                                                          \
+            dbg_trace(#P11_Func "() has failed with ret = " CKR_FMT, ret);     \
+            goto cleanup;                                                      \
         }                                                                      \
-        pData = malloc(dataLen);                                               \
-        if (pData == NULL) {                                                   \
-            dbg_trace("Ran out of memory for the " #api "() call");            \
-            goto end;                                                          \
+        (data) = malloc(data_len);                                             \
+        if ((data) == NULL) {                                                  \
+            dbg_trace("Ran out of memory for the " #P11_Func "() call");       \
+            goto cleanup;                                                      \
         }                                                                      \
-        ret = api(__VA_ARGS__, pData, &dataLen);                               \
+        ret = P11_Func(__VA_ARGS__, (data), &(data_len));                      \
     } while (0)
 
-static inline bool isImportableExportable(CK_OBJECT_CLASS keyClass,
-                                          CK_KEY_TYPE keyType) {
+static inline bool is_importable_exportable(CK_OBJECT_CLASS key_class,
+                                            CK_KEY_TYPE key_type) {
     // NOTE: see OPENJDK-824 for reasons behind skipping DH keys
-    return keyClass == CKO_SECRET_KEY ||
-           (keyClass == CKO_PRIVATE_KEY &&
-            (keyType == CKK_RSA || keyType == CKK_DSA || keyType == CKK_EC));
+    return key_class == CKO_SECRET_KEY ||
+           (key_class == CKO_PRIVATE_KEY &&
+            (key_type == CKK_RSA || key_type == CKK_DSA || key_type == CKK_EC));
 }
 
-static inline bool getKeyType(CK_SESSION_HANDLE hSession,
-                              CK_OBJECT_HANDLE hObject,
-                              CK_OBJECT_CLASS *pKeyClass,
-                              CK_KEY_TYPE *pKeyType) {
-    CK_ATTRIBUTE attrs[] = {
-        {CKA_CLASS,    pKeyClass, sizeof(CK_OBJECT_CLASS)},
-        {CKA_KEY_TYPE, pKeyType,  sizeof(CK_KEY_TYPE)    },
+static inline bool get_key_type_from_object(CK_SESSION_HANDLE session,
+                                            CK_OBJECT_HANDLE key_id,
+                                            CK_OBJECT_CLASS *key_class,
+                                            CK_KEY_TYPE *key_type) {
+    CK_ATTRIBUTE attributes[] = {
+        {CKA_CLASS,    key_class, sizeof(CK_OBJECT_CLASS)},
+        {CKA_KEY_TYPE, key_type,  sizeof(CK_KEY_TYPE)    },
     };
-    CK_RV ret = P11.C_GetAttributeValue(hSession, hObject, attrs,
-                                        sizeof(attrs) / sizeof(CK_ATTRIBUTE));
+    CK_RV ret = P11.C_GetAttributeValue(
+        session, key_id, attributes, sizeof(attributes) / sizeof(CK_ATTRIBUTE));
     if (ret == CKR_OK) {
-        dbg_trace("key: id = %lu, class = " CKO_FMT ", type = " CKK_FMT,
-                  hObject, *pKeyClass, *pKeyType);
+        dbg_trace("key: id = %lu, class = " CKO_FMT ", type = " CKK_FMT, key_id,
+                  *key_class, *key_type);
         return true;
     } else {
         dbg_trace("C_GetAttributeValue call failed with ret = " CKR_FMT, ret);
@@ -80,9 +80,9 @@ static inline bool getKeyType(CK_SESSION_HANDLE hSession,
     }
 }
 
-static inline void getBBoolAttr(CK_ATTRIBUTE_PTR attr,
-                                CK_ATTRIBUTE_TYPE expected_type,
-                                CK_BBOOL **out) {
+static inline void get_matching_bool(CK_ATTRIBUTE_PTR attr,
+                                     CK_ATTRIBUTE_TYPE expected_type,
+                                     CK_BBOOL **out) {
     if (attr != NULL && attr->type == expected_type &&
         attr->ulValueLen == sizeof(CK_BBOOL) && attr->pValue != NULL) {
         *out = attr->pValue;
