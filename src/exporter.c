@@ -56,6 +56,22 @@ static inline void clear_sensitive_cached_attrs(void) {
     cached_attrs_initialized = false;
 }
 
+#define __store_cached_attr(attr_type, source)                                 \
+    do {                                                                       \
+        CK_ATTRIBUTE_PTR cached_attr = get_sensitive_cached_attr(attr_type);   \
+        if (cached_attr == NULL) {                                             \
+            dbg_trace("Trying to store unknown sensitive attribute");          \
+            return CKR_GENERAL_ERROR;                                          \
+        }                                                                      \
+        cached_attr->pValue = malloc((source).len);                            \
+        if (cached_attr->pValue == NULL) {                                     \
+            dbg_trace("Ran out of memory while exporting " #attr_type);        \
+            return CKR_HOST_MEMORY;                                            \
+        }                                                                      \
+        memcpy(cached_attr->pValue, (source).data, (source).len);              \
+        cached_attr->ulValueLen = (source).len;                                \
+    } while (0)
+
 static CK_RV decode_and_store_secret_key(CK_BYTE_PTR *encoded_key,
                                          CK_ULONG encoded_key_len) {
     CK_ATTRIBUTE_PTR cached_attr = get_sensitive_cached_attr(CKA_VALUE);
@@ -69,16 +85,74 @@ static CK_RV decode_and_store_secret_key(CK_BYTE_PTR *encoded_key,
 static CK_RV decode_and_store_private_key(CK_KEY_TYPE key_type,
                                           PLArenaPool *arena,
                                           SECItem *encoded_key_item) {
+    NSSLOWKEYPrivateKeyInfo *pki;
+    NSSLOWKEYPrivateKey *lpk;
+    if (!allocate_PrivateKeyInfo_and_PrivateKey(arena, &pki, &lpk)) {
+        return CKR_HOST_MEMORY;
+    }
+
+    if (SEC_QuickDERDecodeItem(arena, pki, nsslowkey_PrivateKeyInfoTemplate,
+                               encoded_key_item) != SECSuccess) {
+        dbg_trace("Failed to decode PKCS #8 private key");
+        return CKR_GENERAL_ERROR;
+    }
+    SECOidTag alg_tag = SECOID_GetAlgorithmTag(&pki->algorithm);
     switch (key_type) {
     case CKK_RSA:
-        // TODO: implement
-        return CKR_GENERAL_ERROR;
+        if (alg_tag != SEC_OID_PKCS1_RSA_ENCRYPTION &&
+            alg_tag != SEC_OID_PKCS1_RSA_PSS_SIGNATURE) {
+            dbg_trace("Unexpected key algorithm tag: %u", alg_tag);
+            return CKR_GENERAL_ERROR;
+        }
+        lpk->keyType = NSSLOWKEYRSAKey;
+        prepare_low_rsa_priv_key_for_asn1(lpk);
+        if (SEC_QuickDERDecodeItem(arena, lpk, nsslowkey_RSAPrivateKeyTemplate,
+                                   &pki->privateKey) != SECSuccess) {
+            dbg_trace("Failed to decode PKCS #8 RSA private key");
+            return CKR_GENERAL_ERROR;
+        }
+        __store_cached_attr(CKA_PRIVATE_EXPONENT, lpk->u.rsa.privateExponent);
+        __store_cached_attr(CKA_PRIME_1, lpk->u.rsa.prime1);
+        __store_cached_attr(CKA_PRIME_2, lpk->u.rsa.prime2);
+        __store_cached_attr(CKA_EXPONENT_1, lpk->u.rsa.exponent1);
+        __store_cached_attr(CKA_EXPONENT_2, lpk->u.rsa.exponent2);
+        __store_cached_attr(CKA_COEFFICIENT, lpk->u.rsa.coefficient);
+        dbg_trace("Successfully decoded RSA private key");
+        break;
     case CKK_DSA:
-        // TODO: implement
-        return CKR_GENERAL_ERROR;
+        if (alg_tag != SEC_OID_ANSIX9_DSA_SIGNATURE) {
+            dbg_trace("Unexpected key algorithm tag: %u", alg_tag);
+            return CKR_GENERAL_ERROR;
+        }
+        lpk->keyType = NSSLOWKEYDSAKey;
+        prepare_low_dsa_priv_key_export_for_asn1(lpk);
+
+        lpk->keyType = NSSLOWKEYDSAKey;
+        prepare_low_dsa_priv_key_export_for_asn1(lpk);
+        if (SEC_QuickDERDecodeItem(arena, lpk,
+                                   nsslowkey_DSAPrivateKeyExportTemplate,
+                                   &pki->privateKey) != SECSuccess) {
+            dbg_trace("Failed to decode PKCS #8 DSA private key");
+            return CKR_GENERAL_ERROR;
+        }
+        __store_cached_attr(CKA_VALUE, lpk->u.dsa.privateValue);
+        dbg_trace("Successfully decoded DSA private key");
+        break;
     case CKK_EC:
-        // TODO: implement
-        return CKR_GENERAL_ERROR;
+        if (alg_tag != SEC_OID_ANSIX962_EC_PUBLIC_KEY) {
+            dbg_trace("Unexpected key algorithm tag: %u", alg_tag);
+            return CKR_GENERAL_ERROR;
+        }
+        lpk->keyType = NSSLOWKEYECKey;
+        prepare_low_ec_priv_key_for_asn1(lpk);
+        if (SEC_QuickDERDecodeItem(arena, lpk, nsslowkey_ECPrivateKeyTemplate,
+                                   &pki->privateKey) != SECSuccess) {
+            dbg_trace("Failed to decode PKCS #8 EC private key");
+            return CKR_GENERAL_ERROR;
+        }
+        __store_cached_attr(CKA_VALUE, lpk->u.ec.privateValue);
+        dbg_trace("Successfully decoded EC private key");
+        break;
     default:
         dbg_trace("Unknown key type: " CKK_FMT, key_type);
         return CKR_GENERAL_ERROR;

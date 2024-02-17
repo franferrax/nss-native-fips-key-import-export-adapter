@@ -5,6 +5,7 @@
 
 #include "nssadapter.h"
 #include <memory.h>
+#include <nss3/lowkeyi.h>
 #include <nss3/pkcs11.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -91,6 +92,23 @@ static inline bool get_key_type_from_object(CK_SESSION_HANDLE session,
         dbg_trace("C_GetAttributeValue call failed with ret = " CKR_FMT, ret);
         return false;
     }
+}
+
+static inline bool
+allocate_PrivateKeyInfo_and_PrivateKey(PLArenaPool *arena,
+                                       NSSLOWKEYPrivateKeyInfo **pki,
+                                       NSSLOWKEYPrivateKey **lpk) {
+    *pki = PORT_ArenaZAlloc(arena, sizeof(NSSLOWKEYPrivateKeyInfo));
+    if (*pki == NULL) {
+        return false;
+    }
+    *lpk = PORT_ArenaZAlloc(arena, sizeof(NSSLOWKEYPrivateKey));
+    if (*lpk == NULL) {
+        return false;
+    }
+    (*lpk)->arena = arena;
+
+    return true;
 }
 
 static inline void zeroize_and_free(void *ptr, size_t len) {
