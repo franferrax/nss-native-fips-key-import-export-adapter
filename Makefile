@@ -7,7 +7,7 @@ OUTPUT       := $(BIN_DIR)/lib$(NAME).so
 DBG_SENTINEL := $(BIN_DIR)/_built_in_debug_mode_
 
 CC            = gcc
-LIBS          = softokn3
+LIBS          = softokn3 nss3
 INCLUDES      = /usr/include/nspr4
 CFLAGS        = -shared -fPIC $(addprefix -l,$(LIBS)) $(addprefix -I,$(INCLUDES)) \
                 -Wpedantic -Wall -Wextra -Wconversion -Werror -fvisibility=hidden

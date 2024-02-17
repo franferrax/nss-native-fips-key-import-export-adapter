@@ -67,8 +67,8 @@ static CK_RV decode_and_store_secret_key(CK_BYTE_PTR *encoded_key,
 }
 
 static CK_RV decode_and_store_private_key(CK_KEY_TYPE key_type,
-                                          CK_BYTE_PTR *encoded_key,
-                                          CK_ULONG encoded_key_len) {
+                                          PLArenaPool *arena,
+                                          SECItem *encoded_key_item) {
     switch (key_type) {
     case CKK_RSA:
         // TODO: implement
@@ -90,6 +90,7 @@ static CK_RV export_and_store_key_in_tls(CK_OBJECT_CLASS key_class,
                                          CK_KEY_TYPE key_type,
                                          CK_OBJECT_HANDLE key_id) {
     CK_RV ret = CKR_OK;
+    PLArenaPool *arena = NULL;
     CK_BYTE_PTR encoded_key = NULL;
     CK_ULONG encoded_key_len = 0;
     CK_BYTE_PTR encrypted_key = NULL;
@@ -126,8 +127,18 @@ static CK_RV export_and_store_key_in_tls(CK_OBJECT_CLASS key_class,
         ret = decode_and_store_secret_key(&encoded_key, encoded_key_len);
         break;
     case CKO_PRIVATE_KEY:
-        ret = decode_and_store_private_key(key_type, &encoded_key,
-                                           encoded_key_len);
+        if (encoded_key_len > UINT_MAX) {
+            dbg_trace("Too big encoded key (%lu bytes)", encoded_key_len);
+            return_with_cleanup(CKR_GENERAL_ERROR);
+        }
+        SECItem encoded_key_item = {.type = siBuffer,
+                                    .data = encoded_key,
+                                    .len = (unsigned int)encoded_key_len};
+        arena = PORT_NewArena(2048);
+        if (arena == NULL) {
+            return_with_cleanup(CKR_HOST_MEMORY);
+        }
+        ret = decode_and_store_private_key(key_type, arena, &encoded_key_item);
         break;
     default:
         dbg_trace("Unknown key class");
@@ -144,6 +155,9 @@ cleanup:
     }
     if (encoded_key != NULL) {
         zeroize_and_free(encoded_key, encoded_key_len);
+    }
+    if (arena != NULL) {
+        PORT_FreeArena(arena, /* zero = */ PR_TRUE);
     }
     return ret;
 }
