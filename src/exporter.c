@@ -123,10 +123,10 @@ static CK_RV export_and_store_key_in_tls(CK_OBJECT_CLASS key_class,
     }
 cleanup:
     if (encrypted_key != NULL) {
-        free(encrypted_key);
+        zeroize_and_free(encrypted_key, encrypted_key_len);
     }
     if (encoded_key != NULL) {
-        free(encoded_key);
+        zeroize_and_free(encoded_key, encoded_key_len);
     }
     return ret;
 }

@@ -4,8 +4,10 @@
 #define P11_UTIL_H
 
 #include "nssadapter.h"
+#include <memory.h>
 #include <nss3/pkcs11.h>
 #include <stdbool.h>
+#include <stdlib.h>
 
 #define FIPS_SLOT_ID 3
 
@@ -82,6 +84,11 @@ static inline bool get_key_type_from_object(CK_SESSION_HANDLE session,
         dbg_trace("C_GetAttributeValue call failed with ret = " CKR_FMT, ret);
         return false;
     }
+}
+
+static inline void zeroize_and_free(void *ptr, size_t len) {
+    memset(ptr, 0, len);
+    free(ptr);
 }
 
 #endif // P11_UTIL_H
