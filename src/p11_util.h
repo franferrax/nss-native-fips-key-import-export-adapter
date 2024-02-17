@@ -55,6 +55,15 @@
         }                                                                      \
     } while (0)
 
+// If 'attr' matches 'expected_type', load 'output' with a pointer to it
+#define get_matching_bool(attr, expected_type, output)                         \
+    do {                                                                       \
+        if ((attr).type == (expected_type) &&                                  \
+            (attr).ulValueLen == sizeof(CK_BBOOL) && (attr).pValue != NULL) {  \
+            (output) = (attr).pValue;                                          \
+        }                                                                      \
+    } while (0)
+
 static inline bool is_importable_exportable(CK_OBJECT_CLASS key_class,
                                             CK_KEY_TYPE key_type) {
     // NOTE: see OPENJDK-824 for reasons behind skipping DH keys
@@ -81,19 +90,6 @@ static inline bool get_key_type_from_object(CK_SESSION_HANDLE session,
         dbg_trace("C_GetAttributeValue call failed with ret = " CKR_FMT, ret);
         return false;
     }
-}
-
-static inline void get_matching_bool(CK_ATTRIBUTE_PTR attr,
-                                     CK_ATTRIBUTE_TYPE expected_type,
-                                     CK_BBOOL **out) {
-    if (attr != NULL && attr->type == expected_type &&
-        attr->ulValueLen == sizeof(CK_BBOOL) && attr->pValue != NULL) {
-        *out = attr->pValue;
-    }
-}
-
-static inline CK_BBOOL isUnavailableInformation(CK_ATTRIBUTE_PTR attr) {
-    return attr != NULL && attr->ulValueLen == CK_UNAVAILABLE_INFORMATION;
 }
 
 #endif // P11_UTIL_H

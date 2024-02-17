@@ -185,9 +185,9 @@ CK_RV export_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
         CK_BBOOL *sensitive = NULL;
         CK_BBOOL *extractable = NULL;
         for (size_t n = 0; n < n_attributes; n++) {
-            get_matching_bool(&attributes[n], CKA_TOKEN, &token);
-            get_matching_bool(&attributes[n], CKA_SENSITIVE, &sensitive);
-            get_matching_bool(&attributes[n], CKA_EXTRACTABLE, &extractable);
+            get_matching_bool(attributes[n], CKA_TOKEN, token);
+            get_matching_bool(attributes[n], CKA_SENSITIVE, sensitive);
+            get_matching_bool(attributes[n], CKA_EXTRACTABLE, extractable);
             if (token != NULL && *token == CK_TRUE) {
                 dbg_trace("Without an NSS DB, CKA_TOKEN should always be "
                           "CK_FALSE");
@@ -214,7 +214,7 @@ CK_RV export_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
     } else if (ret == CKR_ATTRIBUTE_SENSITIVE) {
         CK_ATTRIBUTE_PTR cached_attr = NULL;
         for (size_t n = 0; n < n_attributes; n++) {
-            if (isUnavailableInformation(&attributes[n])) {
+            if (attributes[n].ulValueLen == CK_UNAVAILABLE_INFORMATION) {
                 cached_attr = get_sensitive_cached_attr(attributes[n].type);
                 if (cached_attr == NULL) {
                     dbg_trace("Unknown sensitive attribute");
