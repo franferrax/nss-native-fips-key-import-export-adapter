@@ -10,34 +10,44 @@
 #include <stdlib.h>
 
 /* ****************************************************************************
- * Common functionality
- * ****************************************************************************/
+ * Global importer/exporter data
+ * ****************************************************************************
+   .orig_funcs_list            [aliased &P11]        (CK_FUNCTION_LIST_PTR)
+     Saved non-decorated original function list from NSS, for this wrapper's
+     use. NOTE: the PKCS #11 v3.0 standard states 'CK_FUNCTION_LIST_3_0 is a
+     structure which contains the same function pointers as in CK_FUNCTION_LIST
+     and additional functions added to the end of the structure that were
+     defined in Cryptoki version 3.0'. This implies that we can safely use
+     CK_FUNCTION_LIST regardless of the version, as long as it contains all the
+     functions we need.
 
-// Saved non-decorated original function list from NSS, for this wrapper's use.
-// NOTE: the PKCS #11 v3.0 standard states 'CK_FUNCTION_LIST_3_0 is a structure
-// which contains the same function pointers as in CK_FUNCTION_LIST and
-// additional functions added to the end of the structure that were defined in
-// Cryptoki version 3.0'. This implies that we can safely use CK_FUNCTION_LIST
-// regardless of the version, as long as it contains all the functions we need.
-CK_FUNCTION_LIST_PTR o = NULL;
+   .importer_exporter.session  [aliased IE.session]  (CK_SESSION_HANDLE)
+   .importer_exporter.key_id   [aliased IE.key_id]   (CK_OBJECT_HANDLE)
+   .importer_exporter.mech     [aliased IE.mech]     (CK_MECHANISM, has the IV)
+     Import / Export session, key, initialization vector (IV) and mechanism. The
+     IV was randomly generated once: there is no point in trying to generate it
+     at run time, since the encryption is temporary, and we are receiving or
+     going to return the sensitive attributes in plain.
+
+*/
+static CK_BYTE iv[] = {0xa1, 0xe9, 0xe1, 0x95, 0xbf, 0x11, 0x6c, 0xca,
+                       0xef, 0xa5, 0x56, 0x5e, 0xdd, 0xfc, 0xdc, 0x8c};
+static global_data_t global_data = {
+    .orig_funcs_list = NULL,
+    .importer_exporter = {.session = CK_INVALID_HANDLE,
+                          .key_id = CK_INVALID_HANDLE,
+                          .mech = {CKM_AES_CBC_PAD, &iv, sizeof(iv)}},
+};
 
 // Copy for the decorated versions of the CK_INTERFACE and CK_FUNCTION_LIST/_3_0
 // structures. We use CK_FUNCTION_LIST_3_0 since it has enough space to hold all
 // the CK_FUNCTION_LIST data, in runtime, one or the other can be present.
-CK_INTERFACE decoratedInterface = {0};
-CK_FUNCTION_LIST_3_0 decoratedFunctionList = {0};
+static CK_INTERFACE decoratedInterface = {0};
+static CK_FUNCTION_LIST_3_0 decoratedFunctionList = {0};
 
-// Import/Export session, key, initialization vector (IV) and mechanism. The
-// IV was randomly generated once: there is no point in trying to generate it
-// at run time, since the encryption is temporary, and we are receiving or
-// going to return the sensitive attributes in plain.
-static CK_SESSION_HANDLE ieKeySession = CK_INVALID_HANDLE;
-static CK_OBJECT_HANDLE ieKey = CK_INVALID_HANDLE;
-static CK_BYTE iv[] = {0xa1, 0xe9, 0xe1, 0x95, 0xbf, 0x11, 0x6c, 0xca,
-                       0xef, 0xa5, 0x56, 0x5e, 0xdd, 0xfc, 0xdc, 0x8c};
-static CK_MECHANISM ieKeyMech = {.mechanism = CKM_AES_CBC_PAD,
-                                 .pParameter = &iv,
-                                 .ulParameterLen = sizeof(iv)};
+inline global_data_t *__get_global_data() {
+    return &global_data;
+}
 
 // Thread-local stored exported attributes, to keep them
 // from one call (querying the buffer sizes) to the other
@@ -79,7 +89,7 @@ static CK_ATTRIBUTE_PTR getSensitiveCachedAttr(CK_ATTRIBUTE_TYPE type) {
 
 CK_RV C_CreateObject(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTemplate,
                      CK_ULONG ulCount, CK_OBJECT_HANDLE_PTR phObject) {
-    CK_RV ret = o->C_CreateObject(hSession, pTemplate, ulCount, phObject);
+    CK_RV ret = P11.C_CreateObject(hSession, pTemplate, ulCount, phObject);
     dbg_trace("Forwarded to original function (returned " CKR_FMT "), "
               "parameters:\nhSession = 0x%08lx, pTemplate = %p, "
               "ulCount = %lu, phObject = %p",
@@ -139,15 +149,15 @@ static CK_RV exportKey(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
     CK_OBJECT_CLASS keyClass;
     CK_KEY_TYPE keyType;
 
-    CK_RV ret = getKeyType(o, hSession, hObject, &keyClass, &keyType);
+    CK_RV ret = getKeyType(hSession, hObject, &keyClass, &keyType);
     if (ret != CKR_OK) {
         dbg_trace("Could not determine the key type");
         goto end;
     }
 
     // Wrap
-    ALLOCATION_IDIOM(o->C_WrapKey, pEncryptedKey, encryptedKeyLen, ieKeySession,
-                     &ieKeyMech, ieKey, hObject);
+    ALLOCATION_IDIOM(P11.C_WrapKey, pEncryptedKey, encryptedKeyLen, IE.session,
+                     &IE.mech, IE.key_id, hObject);
     dbg_trace("Called C_WrapKey() to export the key (returned " CKR_FMT
               "), wrapped key len = %lu",
               ret, encryptedKeyLen);
@@ -156,12 +166,12 @@ static CK_RV exportKey(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
     }
 
     // Decrypt
-    ret = o->C_DecryptInit(ieKeySession, &ieKeyMech, ieKey);
+    ret = P11.C_DecryptInit(IE.session, &IE.mech, IE.key_id);
     if (ret != CKR_OK) {
         dbg_trace("C_DecryptInit has failed with " CKR_FMT, ret);
         goto end;
     }
-    ALLOCATION_IDIOM(o->C_Decrypt, pEncodedKey, encodedKeyLen, ieKeySession,
+    ALLOCATION_IDIOM(P11.C_Decrypt, pEncodedKey, encodedKeyLen, IE.session,
                      pEncryptedKey, encryptedKeyLen);
     dbg_trace("Called C_Decrypt() to export the key (returned " CKR_FMT
               "), encoded key len = %lu",
@@ -212,7 +222,7 @@ end:
 
 CK_RV C_GetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
                           CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount) {
-    CK_RV ret = o->C_GetAttributeValue(hSession, hObject, pTemplate, ulCount);
+    CK_RV ret = P11.C_GetAttributeValue(hSession, hObject, pTemplate, ulCount);
     dbg_trace("Forwarded to original function (returned " CKR_FMT "), "
               "parameters:\nhSession = 0x%08lx, hObject = %lu, "
               "pTemplate = %p, ulCount = %lu",
@@ -244,7 +254,7 @@ CK_RV C_GetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
             }
             if (token != NULL && sensitive != NULL && extractable != NULL) {
                 // Non-token, sensitive and extractable key:
-                if (!isKeyType(o, hSession, hObject, CKO_PRIVATE_KEY, CKK_DH)) {
+                if (!isKeyType(hSession, hObject, CKO_PRIVATE_KEY, CKK_DH)) {
                     // See OPENJDK-824 for reasons behind skipping DH keys
                     dbg_trace("Forcing extractable key to be non-sensitive, "
                               "to prevent an opaque Java key object, which "
@@ -311,7 +321,7 @@ CK_RV C_GetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
  * ****************************************************************************/
 
 CK_RV initializeImporterExporter() {
-    if (ieKey != CK_INVALID_HANDLE) {
+    if (IE.key_id != CK_INVALID_HANDLE) {
         // Already initialized
         return CKR_OK;
     }
@@ -319,7 +329,7 @@ CK_RV initializeImporterExporter() {
     // NSS realizes that no DB was configured and FIPS level is 2 after the
     // C_GetTokenInfo() call, and stops requiring login on each operation
     CK_TOKEN_INFO info;
-    CK_RV ret = o->C_GetTokenInfo(FIPS_SLOT_ID, &info);
+    CK_RV ret = P11.C_GetTokenInfo(FIPS_SLOT_ID, &info);
     dbg_trace("Called C_GetTokenInfo() to remove the login requirement "
               "(returned " CKR_FMT ")",
               ret);
@@ -327,8 +337,8 @@ CK_RV initializeImporterExporter() {
         return ret;
     }
 
-    ret = o->C_OpenSession(FIPS_SLOT_ID, CKF_SERIAL_SESSION, NULL, NULL,
-                           &ieKeySession);
+    ret = P11.C_OpenSession(FIPS_SLOT_ID, CKF_SERIAL_SESSION, NULL, NULL,
+                            &IE.session);
     dbg_trace("Called C_OpenSession() to create the session for the "
               "import/export key (returned " CKR_FMT ")",
               ret);
@@ -345,8 +355,9 @@ CK_RV initializeImporterExporter() {
         {.type = CKA_CLASS,     .pValue = &kClass, .ulValueLen = sizeof(kClass)},
         {.type = CKA_VALUE_LEN, .pValue = &kLen,   .ulValueLen = sizeof(kLen)  },
     };
-    ret = o->C_GenerateKey(ieKeySession, mechanisms, attributes,
-                           sizeof(attributes) / sizeof(CK_ATTRIBUTE), &ieKey);
+    ret = P11.C_GenerateKey(IE.session, mechanisms, attributes,
+                            sizeof(attributes) / sizeof(CK_ATTRIBUTE),
+                            &IE.key_id);
     dbg_trace("Called C_GenerateKey() to create the import/export key "
               "(returned " CKR_FMT ")",
               ret);
@@ -354,7 +365,7 @@ CK_RV initializeImporterExporter() {
 }
 
 CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
-    CK_RV ret = o->C_Initialize(pInitArgs);
+    CK_RV ret = P11.C_Initialize(pInitArgs);
     dbg_trace("Forwarded to original function (returned " CKR_FMT "), "
               "pInitArgs = %p",
               ret, (void *)pInitArgs);
@@ -365,7 +376,7 @@ CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
         // at this point (inside the C_Initialize() implementation), we are
         // guaranteed that the importer/exporter initialization will not be
         // concurrently executed.
-        if (initializeImporterExporter(o) != CKR_OK) {
+        if (initializeImporterExporter() != CKR_OK) {
             ret = CKR_GENERAL_ERROR;
         }
     }
@@ -400,13 +411,14 @@ EXPORTED_FUNCTION CK_RV C_GetInterface(CK_UTF8CHAR_PTR pInterfaceName,
     CK_RV ret = FC_GetInterface(pInterfaceName, pVersion, ppInterface, flags);
     if (ret == CKR_OK) {
         // Save non-decorated original function list, for this wrapper's use
-        o = (*ppInterface)->pFunctionList;
+        global_data.orig_funcs_list = (*ppInterface)->pFunctionList;
+        CK_VERSION_PTR version = (*ppInterface)->pFunctionList;
 
         // Clone returned structures
         memcpy(&decoratedInterface, *ppInterface, sizeof(decoratedInterface));
-        memcpy(&decoratedFunctionList, o,
-               o->version.major == 3 ? sizeof(CK_FUNCTION_LIST_3_0)
-                                     : sizeof(CK_FUNCTION_LIST));
+        memcpy(&decoratedFunctionList, global_data.orig_funcs_list,
+               version->major == 3 ? sizeof(CK_FUNCTION_LIST_3_0)
+                                   : sizeof(CK_FUNCTION_LIST));
 
         // Decorate functions
         decoratedFunctionList.C_CreateObject = C_CreateObject;
@@ -416,9 +428,8 @@ EXPORTED_FUNCTION CK_RV C_GetInterface(CK_UTF8CHAR_PTR pInterfaceName,
         // Update pointers
         decoratedInterface.pFunctionList = &decoratedFunctionList;
         *ppInterface = &decoratedInterface;
-        dbg_trace("NSS PKCS #11 v%d.%d, software token successfully "
-                  "adapted",
-                  o->version.major, o->version.minor);
+        dbg_trace("NSS PKCS #11 v%d.%d, software token successfully adapted",
+                  version->major, version->minor);
     }
     return ret;
 }
@@ -442,8 +453,8 @@ static void CONSTRUCTOR_FUNCTION library_constructor(void) {
 
 static void DESTRUCTOR_FUNCTION library_destructor(void) {
     // Destroy import / export key, if created
-    if (ieKeySession != CK_INVALID_HANDLE) {
-        o->C_CloseSession(ieKeySession);
+    if (IE.session != CK_INVALID_HANDLE) {
+        P11.C_CloseSession(IE.session);
     }
     dbg_finalize();
 }

@@ -50,8 +50,7 @@
         ret = api(__VA_ARGS__, pData, &dataLen);                               \
     } while (0)
 
-static inline CK_RV getKeyType(CK_FUNCTION_LIST_PTR o,
-                               CK_SESSION_HANDLE hSession,
+static inline CK_RV getKeyType(CK_SESSION_HANDLE hSession,
                                CK_OBJECT_HANDLE hObject,
                                CK_OBJECT_CLASS *pKeyClass,
                                CK_KEY_TYPE *pKeyType) {
@@ -67,8 +66,8 @@ static inline CK_RV getKeyType(CK_FUNCTION_LIST_PTR o,
          .ulValueLen = sizeof(CK_KEY_TYPE),
          },
     };
-    CK_RV ret = o->C_GetAttributeValue(hSession, hObject, attrs,
-                                       sizeof(attrs) / sizeof(CK_ATTRIBUTE));
+    CK_RV ret = P11.C_GetAttributeValue(hSession, hObject, attrs,
+                                        sizeof(attrs) / sizeof(CK_ATTRIBUTE));
     if (ret == CKR_OK) {
         dbg_trace("key ID = %lu, key class = " CKO_FMT ", key type = " CKK_FMT,
                   hObject, *pKeyClass, *pKeyType);
@@ -78,14 +77,13 @@ static inline CK_RV getKeyType(CK_FUNCTION_LIST_PTR o,
     return ret;
 }
 
-static inline CK_BBOOL isKeyType(CK_FUNCTION_LIST_PTR o,
-                                 CK_SESSION_HANDLE hSession,
+static inline CK_BBOOL isKeyType(CK_SESSION_HANDLE hSession,
                                  CK_OBJECT_HANDLE hObject,
                                  CK_OBJECT_CLASS expectedClass,
                                  CK_KEY_TYPE expectedType) {
     CK_OBJECT_CLASS kClass;
     CK_KEY_TYPE kType;
-    return getKeyType(o, hSession, hObject, &kClass, &kType) == CKR_OK &&
+    return getKeyType(hSession, hObject, &kClass, &kType) == CKR_OK &&
            kClass == expectedClass && kType == expectedType;
 }
 
