@@ -23,6 +23,8 @@ CLANG_FORMAT_STYLE = {                                                         \
     AllowShortFunctionsOnASingleLine: Inline,                                  \
     InsertNewlineAtEOF: true,                                                  \
 }
+CLANG_FORMAT_IGNORED_FILES = $(SRC_DIR)/nss_lowkey_imported.c
+# Copy and pasted content from NSS      ^^^^^^^^^^^^^^^^^^^^^
 
 
 #
@@ -67,7 +69,8 @@ $(OUTPUT): $(BIN_DIR) $(SRC_FILES)
 #
 .PHONY: format
 format:                                             ## Automatically format the source code (requires 'clang-format')
-	@clang-format --verbose -i --style='$(CLANG_FORMAT_STYLE)' $(SRC_FILES) || \
+	@clang-format --verbose -i --style='$(CLANG_FORMAT_STYLE)' \
+	    $(filter-out $(CLANG_FORMAT_IGNORED_FILES),$(SRC_FILES)) || \
 	    echo "In RHEL/Fedora, 'clang-format' is provided by the 'clang-tools-extra' package"
 
 .PHONY: info
