@@ -47,6 +47,70 @@ inline global_data_t *__get_global_data() {
     return &global_data;
 }
 
+/* ****************************************************************************
+ * Common code for importer / exporter entry points
+ * ****************************************************************************/
+
+static inline bool get_key_type_from_attrs(CK_OBJECT_CLASS *key_class,
+                                           CK_KEY_TYPE *key_type,
+                                           CK_ATTRIBUTE_PTR attributes,
+                                           CK_ULONG n_attributes) {
+    bool has_key_class = false;
+    bool has_key_type = false;
+    for (size_t n = 0; n < n_attributes; n++) {
+        if (attributes[n].pValue != NULL) {
+            if (attributes[n].type == CKA_CLASS &&
+                attributes[n].ulValueLen == sizeof(CK_OBJECT_CLASS)) {
+                *key_class = *((CK_OBJECT_CLASS *)attributes[n].pValue);
+                has_key_class = true;
+                if (has_key_type) {
+                    break;
+                }
+            } else if (attributes[n].type == CKA_KEY_TYPE &&
+                       attributes[n].ulValueLen == sizeof(CK_KEY_TYPE)) {
+                *key_type = *((CK_KEY_TYPE *)attributes[n].pValue);
+                has_key_type = true;
+                if (has_key_class) {
+                    break;
+                }
+            }
+        }
+    }
+    if (dbg_is_enabled()) {
+        if (has_key_class && has_key_type) {
+            dbg_trace("key: class = " CKO_FMT ", type = " CKK_FMT, *key_class,
+                      *key_type);
+        } else if (has_key_class) {
+            dbg_trace("key: class = " CKO_FMT ", type = NONE", *key_class);
+        } else if (has_key_type) {
+            dbg_trace("key: class = NONE, type = " CKK_FMT, *key_type);
+        } else {
+            dbg_trace("key: class = NONE, type = NONE");
+        }
+    }
+    return has_key_class && has_key_type;
+}
+
+static inline bool get_key_type_from_object(CK_SESSION_HANDLE session,
+                                            CK_OBJECT_HANDLE key_id,
+                                            CK_OBJECT_CLASS *key_class,
+                                            CK_KEY_TYPE *key_type) {
+    CK_ATTRIBUTE attributes[] = {
+        {CKA_CLASS,    key_class, sizeof(CK_OBJECT_CLASS)},
+        {CKA_KEY_TYPE, key_type,  sizeof(CK_KEY_TYPE)    },
+    };
+    CK_RV ret = P11.C_GetAttributeValue(session, key_id, attributes,
+                                        attrs_count(attributes));
+    if (ret == CKR_OK) {
+        dbg_trace("key: id = %lu, class = " CKO_FMT ", type = " CKK_FMT, key_id,
+                  *key_class, *key_type);
+        return true;
+    } else {
+        dbg_trace("C_GetAttributeValue call failed with ret = " CKR_FMT, ret);
+        return false;
+    }
+}
+
 static inline bool is_importable_exportable(CK_OBJECT_CLASS key_class,
                                             CK_KEY_TYPE key_type) {
     // NOTE: see OPENJDK-824 for reasons behind skipping DH keys
