@@ -294,19 +294,33 @@ CK_RV export_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
             CK_BBOOL *sensitive = NULL;
             CK_BBOOL *extractable = NULL;
             for (size_t n = 0; n < n_attributes; n++) {
-                get_matching_bool(attributes[n], CKA_TOKEN, token);
-                get_matching_bool(attributes[n], CKA_SENSITIVE, sensitive);
-                get_matching_bool(attributes[n], CKA_EXTRACTABLE, extractable);
-                if (token != NULL && *token == CK_TRUE) {
-                    dbg_trace("Without an NSS DB, CKA_TOKEN should always be "
-                              "CK_FALSE");
-                    return_with_cleanup(CKR_GENERAL_ERROR);
-                }
-                if ((sensitive != NULL && *sensitive == CK_FALSE) ||
-                    (extractable != NULL && *extractable == CK_FALSE)) {
-                    // For non-sensitive keys the exporter isn't necessary,
-                    // for non-extractable keys the exporter doesn't work.
-                    break;
+                if (attributes[n].pValue != NULL &&
+                    attributes[n].ulValueLen == sizeof(CK_BBOOL)) {
+                    if (attributes[n].type == CKA_TOKEN) {
+                        token = attributes[n].pValue;
+                        if (*token == CK_TRUE) {
+                            dbg_trace("Without an NSS DB, CKA_TOKEN should "
+                                      "always be CK_FALSE");
+                            return_with_cleanup(CKR_GENERAL_ERROR);
+                        }
+                    } else if (attributes[n].type == CKA_SENSITIVE) {
+                        sensitive = attributes[n].pValue;
+                        if (*sensitive == CK_FALSE) {
+                            // This should never happen in FIPS mode, given that
+                            // is_importable_exportable() returned true, so the
+                            // key is secret or private.
+                            dbg_trace("Non-sensitive key, the exporter is "
+                                      "unnecessary");
+                            break;
+                        }
+                    } else if (attributes[n].type == CKA_EXTRACTABLE) {
+                        extractable = attributes[n].pValue;
+                        if (*extractable == CK_FALSE) {
+                            dbg_trace("Non-extractable key, the exporter will "
+                                      "not work");
+                            break;
+                        }
+                    }
                 }
                 if (token != NULL && sensitive != NULL && extractable != NULL) {
                     // Non-token, sensitive and extractable key, we need

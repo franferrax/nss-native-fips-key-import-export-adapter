@@ -65,15 +65,6 @@
         }                                                                      \
     } while (0)
 
-// If 'attr' matches 'expected_type', load 'output' with a pointer to it
-#define get_matching_bool(attr, expected_type, output)                         \
-    do {                                                                       \
-        if ((attr).type == (expected_type) &&                                  \
-            (attr).ulValueLen == sizeof(CK_BBOOL) && (attr).pValue != NULL) {  \
-            (output) = (attr).pValue;                                          \
-        }                                                                      \
-    } while (0)
-
 static inline bool get_key_type_from_object(CK_SESSION_HANDLE session,
                                             CK_OBJECT_HANDLE key_id,
                                             CK_OBJECT_CLASS *key_class,
