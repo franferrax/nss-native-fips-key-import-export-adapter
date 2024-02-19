@@ -164,7 +164,7 @@ static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
         dbg_trace("Successfully encoded EC private key");
         break;
     default:
-        dbg_trace("Unknown key type");
+        dbg_trace("Unknown key type: " CKK_FMT, key_type);
         return CKR_GENERAL_ERROR;
     }
 
@@ -223,7 +223,7 @@ CK_RV import_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
         }
         break;
     default:
-        dbg_trace("Unknown key class");
+        dbg_trace("Unknown key class: " CKO_FMT, key_class);
         return_with_cleanup(CKR_GENERAL_ERROR);
     }
 

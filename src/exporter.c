@@ -215,9 +215,8 @@ static CK_RV export_and_store_key_in_tls(CK_OBJECT_CLASS key_class,
         ret = decode_and_store_private_key(key_type, arena, &encoded_key_item);
         break;
     default:
-        dbg_trace("Unknown key class");
-        ret = CKR_GENERAL_ERROR;
-        break;
+        dbg_trace("Unknown key class: " CKO_FMT, key_class);
+        return_with_cleanup(CKR_GENERAL_ERROR);
     }
     if (ret == CKR_OK) {
         cached_attrs_initialized = true;

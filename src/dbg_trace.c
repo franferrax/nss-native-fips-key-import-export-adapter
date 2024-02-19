@@ -54,6 +54,7 @@ void dbg_initialize() {
         dbg_file = stderr;
     }
 }
+
 inline bool dbg_is_enabled() {
     return dbg_status & STATUS_ENABLED;
 }
@@ -78,11 +79,11 @@ void dbg_trace_hex(const unsigned char *const buf, size_t len) {
     }
 }
 
-FILE *__dbg_file() {
+inline FILE *__dbg_file() {
     return dbg_file;
 }
 
-void __dbg_new_line_and_flush() {
+inline void __dbg_new_line_and_flush() {
     if (dbg_is_enabled()) {
         fputc('\n', dbg_file);
         fflush(dbg_file);
