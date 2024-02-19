@@ -204,27 +204,19 @@ CK_RV import_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
         }
     }
 
-    switch (key_class) {
-    case CKO_SECRET_KEY:
+    // Encode
+    if (key_class == CKO_SECRET_KEY) {
         ret = encode_secret_key(attributes, n_attributes, &encoded_key_item);
-        if (ret != CKR_OK) {
-            goto cleanup;
-        }
-        break;
-    case CKO_PRIVATE_KEY:
+    } else { // CKO_PRIVATE_KEY, guaranteed by is_importable_exportable()
         arena = PORT_NewArena(2048);
         if (arena == NULL) {
             return_with_cleanup(CKR_HOST_MEMORY);
         }
         ret = encode_private_key(attributes, n_attributes, key_type, arena,
                                  &encoded_key_item, &nss_db_attr_present);
-        if (ret != CKR_OK) {
-            goto cleanup;
-        }
-        break;
-    default:
-        dbg_trace("Unknown key class: " CKO_FMT, key_class);
-        return_with_cleanup(CKR_GENERAL_ERROR);
+    }
+    if (ret != CKR_OK) {
+        goto cleanup;
     }
 
     // Encrypt

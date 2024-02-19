@@ -195,12 +195,10 @@ static CK_RV export_and_store_key_in_tls(CK_OBJECT_CLASS key_class,
         return_with_cleanup(CKR_GENERAL_ERROR);
     }
 
-    // Decode and fix attributes template
-    switch (key_class) {
-    case CKO_SECRET_KEY:
+    // Decode and store
+    if (key_class == CKO_SECRET_KEY) {
         ret = decode_and_store_secret_key(&encoded_key, encoded_key_len);
-        break;
-    case CKO_PRIVATE_KEY:
+    } else { // CKO_PRIVATE_KEY, guaranteed by is_importable_exportable()
         if (encoded_key_len > UINT_MAX) {
             dbg_trace("Too big encoded key (%lu bytes)", encoded_key_len);
             return_with_cleanup(CKR_GENERAL_ERROR);
@@ -213,10 +211,6 @@ static CK_RV export_and_store_key_in_tls(CK_OBJECT_CLASS key_class,
             return_with_cleanup(CKR_HOST_MEMORY);
         }
         ret = decode_and_store_private_key(key_type, arena, &encoded_key_item);
-        break;
-    default:
-        dbg_trace("Unknown key class: " CKO_FMT, key_class);
-        return_with_cleanup(CKR_GENERAL_ERROR);
     }
     if (ret == CKR_OK) {
         cached_attrs_initialized = true;
