@@ -190,7 +190,7 @@ CK_RV import_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
                  CK_SESSION_HANDLE session, CK_ATTRIBUTE_PTR attributes,
                  CK_ULONG n_attributes, CK_OBJECT_HANDLE_PTR key_id) {
     CK_RV ret = CKR_OK;
-    CK_ATTRIBUTE_PTR modified_attrs_array = NULL;
+    CK_ATTRIBUTE_PTR modified_attrs = NULL;
     bool nss_db_attr_present = false;
     PLArenaPool *arena = NULL;
     SECItem encoded_key_item = {0};
@@ -249,17 +249,15 @@ CK_RV import_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
     if (!nss_db_attr_present && key_class == CKO_PRIVATE_KEY &&
         (key_type == CKK_DSA || key_type == CKK_EC)) {
         dbg_trace("Adding CKA_NSS_DB (a.k.a. CKA_NETSCAPE_DB) attribute");
-        modified_attrs_array =
-            malloc((n_attributes + 1) * sizeof(CK_ATTRIBUTE));
-        if (modified_attrs_array == NULL) {
+        modified_attrs = malloc((n_attributes + 1) * sizeof(CK_ATTRIBUTE));
+        if (modified_attrs == NULL) {
             return_with_cleanup(CKR_HOST_MEMORY);
         }
-        memcpy(modified_attrs_array, attributes,
-               n_attributes * sizeof(CK_ATTRIBUTE));
-        modified_attrs_array[n_attributes].type = CKA_NSS_DB;
-        modified_attrs_array[n_attributes].pValue = &zero;
-        modified_attrs_array[n_attributes].ulValueLen = sizeof(zero);
-        attributes = modified_attrs_array;
+        memcpy(modified_attrs, attributes, n_attributes * sizeof(CK_ATTRIBUTE));
+        modified_attrs[n_attributes].type = CKA_NSS_DB;
+        modified_attrs[n_attributes].pValue = &zero;
+        modified_attrs[n_attributes].ulValueLen = sizeof(zero);
+        attributes = modified_attrs;
         n_attributes++;
     }
     ret = P11.C_UnwrapKey(session, &IE.mech, IE.key_id, encrypted_key,
@@ -269,8 +267,8 @@ CK_RV import_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
               *key_id, ret);
 
 cleanup:
-    if (modified_attrs_array != NULL) {
-        free(modified_attrs_array);
+    if (modified_attrs != NULL) {
+        free(modified_attrs);
     }
     if (encrypted_key != NULL) {
         zeroize_and_free(encrypted_key, encrypted_key_len);
