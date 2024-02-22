@@ -278,11 +278,15 @@ EXPORTED_FUNCTION CK_RV C_GetInterface(CK_UTF8CHAR_PTR pInterfaceName,
 
 EXPORTED_FUNCTION CK_RV
 C_GetFunctionList(CK_FUNCTION_LIST_PTR_PTR ppFunctionList) {
-    dbg_trace("Only the C_GetInterface() API is supported by this adapter\n  "
+    dbg_trace("Implementing in terms of C_GetInterface()\n  "
               "ppFunctionList = %p",
               (void *)ppFunctionList);
-    *ppFunctionList = NULL;
-    return CKR_GENERAL_ERROR;
+    CK_INTERFACE_PTR pInterface;
+    CK_RV ret = C_GetInterface(NULL, NULL, &pInterface, 0);
+    if (ret == CKR_OK) {
+        *ppFunctionList = pInterface->pFunctionList;
+    }
+    return ret;
 }
 
 /* ****************************************************************************
