@@ -2,10 +2,12 @@
 
 NAME         := nssadapter
 SRC_DIR      := src
+TST_DIR      := test
 BIN_DIR      := bin
 OUTPUT       := $(BIN_DIR)/lib$(NAME).so
 DBG_SENTINEL := $(BIN_DIR)/_built_in_debug_mode_
 
+JAVA          = java
 CC            = gcc
 LIBS          = softokn3 nss3
 INCLUDES      = /usr/include/nspr4
@@ -82,6 +84,10 @@ info: $(BUILT_MODE)                                 ## Show built binary informa
 	@echo
 	nm --dynamic --radix=x $(OUTPUT)
 	@echo
+
+.PHONY: test
+test: $(BUILT_MODE)                                 ## Run the test suite, usage: make test [JAVA=/path/to/java]
+	$(JAVA)c -d $(BIN_DIR) $(TST_DIR)/Main.java && $(JAVA) -cp $(BIN_DIR) Main $(OUTPUT)
 
 .PHONY: help
 help:                                               ## Display this message
