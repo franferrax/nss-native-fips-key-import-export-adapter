@@ -13,32 +13,20 @@
 // (passing the allocated buffers to get the attributes).
 static __thread bool cached_attrs_initialized = false;
 static __thread CK_ATTRIBUTE cached_sensitive_attrs[] = {
-    {CKA_VALUE,            NULL, 0},
-    {CKA_PRIVATE_EXPONENT, NULL, 0},
-    {CKA_PRIME_1,          NULL, 0},
-    {CKA_PRIME_2,          NULL, 0},
-    {CKA_EXPONENT_1,       NULL, 0},
-    {CKA_EXPONENT_2,       NULL, 0},
-    {CKA_COEFFICIENT,      NULL, 0},
+#define for_each_sensitive_attr(idx, sensitive_attr_type)                      \
+    {.type = sensitive_attr_type, .pValue = NULL, .ulValueLen = 0},
+#include "sensitive_attributes.h"
+#undef for_each_sensitive_attr
 };
 
 static inline CK_ATTRIBUTE_PTR
 get_sensitive_cached_attr(CK_ATTRIBUTE_TYPE type) {
     switch (type) {
-    case CKA_VALUE:
-        return &cached_sensitive_attrs[0];
-    case CKA_PRIVATE_EXPONENT:
-        return &cached_sensitive_attrs[1];
-    case CKA_PRIME_1:
-        return &cached_sensitive_attrs[2];
-    case CKA_PRIME_2:
-        return &cached_sensitive_attrs[3];
-    case CKA_EXPONENT_1:
-        return &cached_sensitive_attrs[4];
-    case CKA_EXPONENT_2:
-        return &cached_sensitive_attrs[5];
-    case CKA_COEFFICIENT:
-        return &cached_sensitive_attrs[6];
+#define for_each_sensitive_attr(idx, sensitive_attr_type)                      \
+    case sensitive_attr_type:                                                  \
+        return &cached_sensitive_attrs[idx];
+#include "sensitive_attributes.h"
+#undef for_each_sensitive_attr
     default:
         return NULL;
     }

@@ -60,10 +60,24 @@
                           "ulValueLen = %lu",                                  \
                           (message), (attr).type, (attr).pValue,               \
                           (attr).ulValueLen);                                  \
-                dbg_trace_hex((attr).pValue, (attr).ulValueLen);               \
+                if (should_dump_attr_value((attr).type)) {                     \
+                    dbg_trace_hex((attr).pValue, (attr).ulValueLen);           \
+                }                                                              \
             }                                                                  \
         }                                                                      \
     } while (0)
+
+static inline bool should_dump_attr_value(UNUSED CK_ATTRIBUTE_TYPE type) {
+    return true
+#ifndef DEBUG
+// Do not dump attribute value if sensitive
+#define for_each_sensitive_attr(idx, sensitive_attr_type)                      \
+    &&type != sensitive_attr_type
+#include "sensitive_attributes.h"
+#undef for_each_sensitive_attr
+#endif
+        ;
+}
 
 static inline bool
 allocate_PrivateKeyInfo_and_PrivateKey(PLArenaPool *arena,

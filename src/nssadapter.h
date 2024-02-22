@@ -9,6 +9,7 @@
 #define CONSTRUCTOR_FUNCTION __attribute__((constructor))
 #define DESTRUCTOR_FUNCTION  __attribute__((destructor))
 #define EXPORTED_FUNCTION    __attribute__((visibility("default")))
+#define UNUSED               __attribute__((unused))
 
 // Global data, see members description in nssadapter.c initialization
 typedef struct {

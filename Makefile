@@ -25,8 +25,11 @@ CLANG_FORMAT_STYLE = {                                                         \
     AllowShortFunctionsOnASingleLine: Inline,                                  \
     InsertNewlineAtEOF: true,                                                  \
 }
-CLANG_FORMAT_IGNORED_FILES = $(SRC_DIR)/nss_lowkey_imported.c
-# Copy and pasted content from NSS      ^^^^^^^^^^^^^^^^^^^^^
+CLANG_FORMAT_IGNORED_FILES = $(SRC_DIR)/nss_lowkey_imported.c                  \
+                             $(SRC_DIR)/sensitive_attributes.h
+# Reasons for exclusion:
+#   nss_lowkey_imported.c  <- copy and pasted content from NSS
+#   sensitive_attributes.h <- this file is wrongly formatted
 
 
 #
