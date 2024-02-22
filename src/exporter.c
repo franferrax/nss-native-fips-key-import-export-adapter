@@ -160,7 +160,7 @@ static CK_RV export_and_store_key_in_tls(CK_OBJECT_CLASS key_class,
 
     // Wrap
     p11_allocation_idiom(P11.C_WrapKey, encrypted_key, encrypted_key_len,
-                         IE.session, &IE.mech, IE.key_id, key_id);
+                         IEK.session, &IEK.mech, IEK.id, key_id);
     dbg_trace("Called C_WrapKey() to export the key\n  "
               "encrypted_key_len = %lu, ret = " CKR_FMT,
               encrypted_key_len, ret);
@@ -169,13 +169,13 @@ static CK_RV export_and_store_key_in_tls(CK_OBJECT_CLASS key_class,
     }
 
     // Decrypt
-    ret = P11.C_DecryptInit(IE.session, &IE.mech, IE.key_id);
+    ret = P11.C_DecryptInit(IEK.session, &IEK.mech, IEK.id);
     if (ret != CKR_OK) {
         dbg_trace("C_DecryptInit has failed with ret = " CKR_FMT, ret);
         return_with_cleanup(CKR_GENERAL_ERROR);
     }
     p11_allocation_idiom(P11.C_Decrypt, encoded_key, encoded_key_len,
-                         IE.session, encrypted_key, encrypted_key_len);
+                         IEK.session, encrypted_key, encrypted_key_len);
     dbg_trace("Called C_Decrypt() to export the key\n  encoded_key_len = %lu, "
               "ret = " CKR_FMT,
               encoded_key_len, ret);

@@ -220,13 +220,13 @@ CK_RV import_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
     }
 
     // Encrypt
-    ret = P11.C_EncryptInit(IE.session, &IE.mech, IE.key_id);
+    ret = P11.C_EncryptInit(IEK.session, &IEK.mech, IEK.id);
     if (ret != CKR_OK) {
         dbg_trace("C_EncryptInit has failed with ret = " CKR_FMT, ret);
         return_with_cleanup(CKR_GENERAL_ERROR);
     }
     p11_allocation_idiom(P11.C_Encrypt, encrypted_key, encrypted_key_len,
-                         IE.session, encoded_key_item.data,
+                         IEK.session, encoded_key_item.data,
                          encoded_key_item.len);
     dbg_trace("Called C_Encrypt() to import the key\n  "
               "encoded_key_item.len = %u, encrypted_key_len = %lu, "
@@ -252,7 +252,7 @@ CK_RV import_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
         attributes = modified_attrs;
         n_attributes++;
     }
-    ret = P11.C_UnwrapKey(session, &IE.mech, IE.key_id, encrypted_key,
+    ret = P11.C_UnwrapKey(session, &IEK.mech, IEK.id, encrypted_key,
                           encrypted_key_len, attributes, n_attributes, key_id);
     dbg_trace("Called C_UnwrapKey() to import the key\n  "
               "imported key_id = %lu, ret = " CKR_FMT,
