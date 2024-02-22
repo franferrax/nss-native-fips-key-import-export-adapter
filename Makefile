@@ -86,5 +86,5 @@ info: $(BUILT_MODE)                                 ## Show built binary informa
 .PHONY: help
 help:                                               ## Display this message
 	@echo '$(shell tput bold)Available make targets:$(shell tput sgr0)'
-	@sed -ne 's/^\([a-zA-Z0-9_\-]*\):.*##\s*\(.*\)/  $(shell tput setaf 6)\1$(shell tput sgr0):\2/p' \
-	    $(MAKEFILE_LIST) | column -c2 -t -s:
+	@sed -ne 's/^\([a-zA-Z0-9_\-]*\):.*##\s*\(.*\)/  $(shell tput setaf 6)\1$(shell tput sgr0)\2/p' \
+	    $(MAKEFILE_LIST) | column -c2 -t -s
