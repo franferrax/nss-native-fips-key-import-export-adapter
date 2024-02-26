@@ -9,10 +9,11 @@ DBG_SENTINEL := $(BIN_DIR)/_built_in_debug_mode_
 
 JAVA          = java
 CC            = gcc
-LIBS          = softokn3 nss3
+LIBS          = pthread softokn3 nss3
 INCLUDES      = /usr/include/nspr4
 CFLAGS        = -shared -fPIC $(addprefix -l,$(LIBS)) $(addprefix -I,$(INCLUDES)) \
-                -Wpedantic -Wall -Wextra -Wconversion -Werror -fvisibility=hidden
+                -Wpedantic -Wall -Wextra -Wconversion -Werror -fvisibility=hidden \
+                -D_GNU_SOURCE
 REL_CFLAGS    = -O3
 DBG_CFLAGS    = -Wno-error=unused-variable -Wno-error=unused-parameter -O0 -g -DDEBUG
 

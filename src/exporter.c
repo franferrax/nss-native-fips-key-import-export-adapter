@@ -158,7 +158,7 @@ static CK_RV export_and_store_key_in_tls(CK_OBJECT_CLASS key_class,
     CK_BYTE_PTR encrypted_key = NULL;
     CK_ULONG encrypted_key_len = 0;
 
-    // Wrap
+    // Wrap.
     p11_allocation_idiom(P11.C_WrapKey, encrypted_key, encrypted_key_len,
                          IEK.session, &IEK.mech, IEK.id, key_id);
     dbg_trace("Called C_WrapKey() to export the key\n  "
@@ -168,7 +168,7 @@ static CK_RV export_and_store_key_in_tls(CK_OBJECT_CLASS key_class,
         return_with_cleanup(CKR_GENERAL_ERROR);
     }
 
-    // Decrypt
+    // Decrypt.
     ret = P11.C_DecryptInit(IEK.session, &IEK.mech, IEK.id);
     if (ret != CKR_OK) {
         dbg_trace("C_DecryptInit has failed with ret = " CKR_FMT, ret);
@@ -183,10 +183,10 @@ static CK_RV export_and_store_key_in_tls(CK_OBJECT_CLASS key_class,
         return_with_cleanup(CKR_GENERAL_ERROR);
     }
 
-    // Decode and store
+    // Decode and store.
     if (key_class == CKO_SECRET_KEY) {
         ret = decode_and_store_secret_key(&encoded_key, encoded_key_len);
-    } else { // CKO_PRIVATE_KEY, guaranteed by is_importable_exportable()
+    } else { // CKO_PRIVATE_KEY, guaranteed by is_importable_exportable().
         if (encoded_key_len > UINT_MAX) {
             dbg_trace("Too big encoded key (%lu bytes)", encoded_key_len);
             return_with_cleanup(CKR_GENERAL_ERROR);
@@ -228,7 +228,7 @@ CK_RV export_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
         CK_ATTRIBUTE_PTR cached_attr =
             get_sensitive_cached_attr(attributes[n].type);
         if (cached_attr == NULL) {
-            // Skip known non-sensitive attribute
+            // Skip known non-sensitive attribute.
             continue;
         }
         if (!cached_attrs_initialized && attributes[n].pValue != NULL) {
@@ -330,14 +330,14 @@ CK_RV export_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
                     return_with_cleanup(CKR_GENERAL_ERROR);
                 }
                 if (first_call) {
-                    // First call, libj2pkcs11 is querying the buffer sizes
+                    // First call, libj2pkcs11 is querying the buffer sizes.
                     dbg_trace("First call, replacing ulValueLen = CK_"
                               "UNAVAILABLE_INFORMATION with ulValueLen = %lu",
                               cached_attr->ulValueLen);
                     attributes[n].ulValueLen = cached_attr->ulValueLen;
                 } else {
                     // Second call, libj2pkcs11 has allocated the buffers and
-                    // is trying to retrieve the attribute values
+                    // is trying to retrieve the attribute values.
                     dbg_trace_attr("Second call, copying previously exported "
                                    "attribute",
                                    *cached_attr);

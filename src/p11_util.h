@@ -12,26 +12,28 @@
 
 #define FIPS_SLOT_ID 3
 
-// Qualify the printed value with its macro prefix, so we can copy the printed
-// REGEX and execute `grep -irE "^\s*#define\s+$(xclip -sel clip)" /usr/include`
-// to know the defined value
-#define __grep_able(prefix) #prefix "_.*0x%08lx"
-#define CKA_FMT             __grep_able(CKA)
-#define CKK_FMT             __grep_able(CKK)
-#define CKO_FMT             __grep_able(CKO)
-#define CKR_FMT             __grep_able(CKR)
+// Qualifies a value with a prefix such that the final text we can be copied to
+// the clipboard and used for the following command:
+//   grep -irE "^\s*#define\s+$(xclip -sel clip)" /usr/include
+// This is used to match CK constants to their definition.
+#define __greppable(prefix) #prefix "_.*0x%08lx"
+#define CKA_FMT             __greppable(CKA) // CK_ATTRIBUTE_TYPE
+#define CKK_FMT             __greppable(CKK) // CK_KEY_TYPE
+#define CKO_FMT             __greppable(CKO) // CK_OBJECT_CLASS
+#define CKR_FMT             __greppable(CKR) // CK_RV (return value)
 
-// Get the length of a fixed-size (stack / global) attributes array
+// Gets the length of a fixed-size (stack / global) attributes array.
 #define attrs_count(attributes) (sizeof(attributes) / sizeof(CK_ATTRIBUTE))
 
-// Load the return value in the 'ret' variable and jump to the 'cleanup' label
+// Loads the return value in the 'ret' variable and jump to the 'cleanup' label.
 #define return_with_cleanup(return_value)                                      \
     do {                                                                       \
         ret = (return_value);                                                  \
         goto cleanup;                                                          \
     } while (0)
 
-// Handle convention described in PKCS #11 v3.0 Section 5.2 on producing output
+// Implements the "Conventions for functions returning output
+// in a variable-length buffer" (PKCS #11 v3.0 Section 5.2).
 #define p11_allocation_idiom(P11_Func, data, data_len, ...)                    \
     do {                                                                       \
         ret = P11_Func(__VA_ARGS__, NULL, &(data_len));                        \
@@ -47,48 +49,18 @@
         ret = P11_Func(__VA_ARGS__, (data), &(data_len));                      \
     } while (0)
 
-// Log a CK_ATTRIBUTE with all its fields and data
-#define dbg_trace_attr(message, attr)                                          \
-    do {                                                                       \
-        if (dbg_is_enabled()) {                                                \
-            if ((attr).ulValueLen == CK_UNAVAILABLE_INFORMATION) {             \
-                dbg_trace("%s:\n  type = " CKA_FMT ", pValue = %p, "           \
-                          "ulValueLen = CK_UNAVAILABLE_INFORMATION",           \
-                          (message), (attr).type, (attr).pValue);              \
-            } else {                                                           \
-                dbg_trace("%s:\n  type = " CKA_FMT ", pValue = %p, "           \
-                          "ulValueLen = %lu",                                  \
-                          (message), (attr).type, (attr).pValue,               \
-                          (attr).ulValueLen);                                  \
-                if (should_dump_attr_value((attr).type)) {                     \
-                    dbg_trace_hex((attr).pValue, (attr).ulValueLen);           \
-                }                                                              \
-            }                                                                  \
-        }                                                                      \
-    } while (0)
-
-static inline bool should_dump_attr_value(UNUSED CK_ATTRIBUTE_TYPE type) {
-    return true
-#ifndef DEBUG
-// Do not dump attribute value if sensitive
-#define for_each_sensitive_attr(idx, sensitive_attr_type)                      \
-    &&type != sensitive_attr_type
-#include "sensitive_attributes.h"
-#undef for_each_sensitive_attr
-#endif
-        ;
-}
-
 static inline bool
 allocate_PrivateKeyInfo_and_PrivateKey(PLArenaPool *arena,
                                        NSSLOWKEYPrivateKeyInfo **pki,
                                        NSSLOWKEYPrivateKey **lpk) {
     *pki = PORT_ArenaZAlloc(arena, sizeof(NSSLOWKEYPrivateKeyInfo));
     if (*pki == NULL) {
+        dbg_trace("Failed to allocate NSSLOWKEYPrivateKeyInfo");
         return false;
     }
     *lpk = PORT_ArenaZAlloc(arena, sizeof(NSSLOWKEYPrivateKey));
     if (*lpk == NULL) {
+        dbg_trace("Failed to allocate NSSLOWKEYPrivateKey");
         return false;
     }
     (*lpk)->arena = arena;

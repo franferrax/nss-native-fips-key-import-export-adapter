@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later WITH Classpath-exception-2.0
 
 // Use:
-// #define for_each_sensitive_attr(idx, sensitive_attr_type) YOUR_ACTION
-// #include "sensitive_attributes.h"
+//   #define for_each_sensitive_attr(idx, sensitive_attr_type) YOUR_ACTION
+//   #include "sensitive_attributes.h"
+//   #undef for_each_sensitive_attr
 
 for_each_sensitive_attr(0, CKA_VALUE)
 for_each_sensitive_attr(1, CKA_PRIVATE_EXPONENT)

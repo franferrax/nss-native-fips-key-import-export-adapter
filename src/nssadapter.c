@@ -89,7 +89,7 @@ static inline bool get_key_type_from_object(CK_SESSION_HANDLE session,
 
 static inline bool is_importable_exportable(CK_OBJECT_CLASS key_class,
                                             CK_KEY_TYPE key_type) {
-    // NOTE: see OPENJDK-824 for reasons behind skipping DH keys
+    // NOTE: see OPENJDK-824 for reasons behind skipping DH keys.
     return key_class == CKO_SECRET_KEY ||
            (key_class == CKO_PRIVATE_KEY &&
             (key_type == CKK_RSA || key_type == CKK_DSA || key_type == CKK_EC));
@@ -101,7 +101,7 @@ static inline bool is_importable_exportable(CK_OBJECT_CLASS key_class,
 
 static CK_RV initialize_importer_exporter() {
     if (IEK.id != CK_INVALID_HANDLE) {
-        // Already initialized
+        // Already initialized.
         return CKR_OK;
     }
 
@@ -116,7 +116,7 @@ static CK_RV initialize_importer_exporter() {
         return ret;
     }
 
-    // Create importer / exporter session
+    // Create importer / exporter session.
     ret = P11.C_OpenSession(FIPS_SLOT_ID, CKF_SERIAL_SESSION, NULL, NULL,
                             &IEK.session);
     dbg_trace("Called C_OpenSession() to create the session for the "
@@ -126,7 +126,7 @@ static CK_RV initialize_importer_exporter() {
         return ret;
     }
 
-    // Create importer / exporter key
+    // Create importer / exporter key.
     CK_OBJECT_CLASS keyClass = CKO_SECRET_KEY;
     CK_ULONG keyLen = 256 >> 3;
     CK_MECHANISM mechanisms[] = {
@@ -206,7 +206,7 @@ CK_RV C_GetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
  * Get interface entry point
  * ****************************************************************************/
 
-// Prototype for the FIPS version in NSS' libsoftokn3.so
+// Prototype for the FIPS version in NSS' libsoftokn3.so.
 CK_RV FC_GetInterface(CK_UTF8CHAR_PTR pInterfaceName, CK_VERSION_PTR pVersion,
                       CK_INTERFACE_PTR_PTR ppInterface, CK_FLAGS flags);
 
@@ -222,7 +222,7 @@ EXPORTED_FUNCTION CK_RV C_GetInterface(CK_UTF8CHAR_PTR pInterfaceName,
         return CKR_GENERAL_ERROR;
     }
     if (decorated_interface.pFunctionList == &decorated_func_list) {
-        // Already initialized
+        // Already initialized.
         *ppInterface = &decorated_interface;
         return CKR_OK;
     }
@@ -231,22 +231,22 @@ EXPORTED_FUNCTION CK_RV C_GetInterface(CK_UTF8CHAR_PTR pInterfaceName,
     CK_RV ret = FC_GetInterface(pInterfaceName, pVersion, &pInterface, flags);
     dbg_trace("Called NSS FC_GetInterface()\n  ret = " CKR_FMT, ret);
     if (ret == CKR_OK) {
-        // Save non-decorated original function list, for internal use
+        // Save non-decorated original function list, for internal use.
         global_data.orig_funcs_list = pInterface->pFunctionList;
         CK_VERSION_PTR version = &global_data.orig_funcs_list->version;
 
-        // Clone returned structures
+        // Clone returned structures.
         memcpy(&decorated_interface, pInterface, sizeof(decorated_interface));
         memcpy(&decorated_func_list, global_data.orig_funcs_list,
                version->major == 3 ? sizeof(CK_FUNCTION_LIST_3_0)
                                    : sizeof(CK_FUNCTION_LIST));
 
-        // Decorate functions
+        // Decorate functions.
         decorated_func_list.C_CreateObject = C_CreateObject;
         decorated_func_list.C_GetAttributeValue = C_GetAttributeValue;
         decorated_func_list.C_Initialize = C_Initialize;
 
-        // Update pointers
+        // Update pointers.
         decorated_interface.pFunctionList = &decorated_func_list;
         *ppInterface = &decorated_interface;
         dbg_trace("NSS PKCS #11 v%d.%d, software token successfully adapted",
@@ -277,7 +277,7 @@ static void CONSTRUCTOR_FUNCTION library_constructor(void) {
 }
 
 static void DESTRUCTOR_FUNCTION library_destructor(void) {
-    // Destroy import / export key, if created
+    // Destroy import / export key, if created.
     if (IEK.session != CK_INVALID_HANDLE) {
         P11.C_CloseSession(IEK.session);
     }

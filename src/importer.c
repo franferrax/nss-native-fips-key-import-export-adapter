@@ -204,10 +204,10 @@ CK_RV import_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
         }
     }
 
-    // Encode
+    // Encode.
     if (key_class == CKO_SECRET_KEY) {
         ret = encode_secret_key(attributes, n_attributes, &encoded_key_item);
-    } else { // CKO_PRIVATE_KEY, guaranteed by is_importable_exportable()
+    } else { // CKO_PRIVATE_KEY, guaranteed by is_importable_exportable().
         arena = PORT_NewArena(2048);
         if (arena == NULL) {
             return_with_cleanup(CKR_HOST_MEMORY);
@@ -219,7 +219,7 @@ CK_RV import_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
         goto cleanup;
     }
 
-    // Encrypt
+    // Encrypt.
     ret = P11.C_EncryptInit(IEK.session, &IEK.mech, IEK.id);
     if (ret != CKR_OK) {
         dbg_trace("C_EncryptInit has failed with ret = " CKR_FMT, ret);
@@ -236,7 +236,7 @@ CK_RV import_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
         return_with_cleanup(CKR_GENERAL_ERROR);
     }
 
-    // Unwrap
+    // Unwrap.
     CK_BYTE zero = 0;
     if (!nss_db_attr_present && key_class == CKO_PRIVATE_KEY &&
         (key_type == CKK_DSA || key_type == CKK_EC)) {
