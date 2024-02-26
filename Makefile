@@ -103,5 +103,5 @@ test: $(BUILT_MODE)
 help:
 	@echo '$(shell tput bold)Available make targets:$(shell tput sgr0)'
 	@sed -ne 's/^\.PHONY:\s*\([a-zA-Z0-9_\-]*\)\s*##\s*\(.*\)/                 \
-	  $(shell tput setaf 6)\1$(shell tput sgr0)\2/p' $(MAKEFILE_LIST) |      \
-	    column -c2 -t -s
+	  $(shell tput setaf 6)\1$(shell tput sgr0)$(shell printf "\x1E")\2/p'     \
+	  $(MAKEFILE_LIST) | column -c2 -t -s$(shell printf "\x1E")
