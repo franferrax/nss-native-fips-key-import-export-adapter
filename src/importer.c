@@ -164,7 +164,9 @@ static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
         dbg_trace("Successfully encoded EC private key");
         break;
     default:
-        dbg_trace("Unknown key type: " CKK_FMT, key_type);
+        dbg_trace("This should never happen, given is_importable_exportable() "
+                  "was previously called\n  key_type = " CKK_FMT,
+                  key_type);
         return CKR_GENERAL_ERROR;
     }
 
@@ -207,16 +209,21 @@ CK_RV import_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
     // Encode.
     if (key_class == CKO_SECRET_KEY) {
         ret = encode_secret_key(attributes, n_attributes, &encoded_key_item);
-    } else { // CKO_PRIVATE_KEY, guaranteed by is_importable_exportable().
+    } else if (key_class == CKO_PRIVATE_KEY) {
         arena = PORT_NewArena(2048);
         if (arena == NULL) {
             return_with_cleanup(CKR_HOST_MEMORY);
         }
         ret = encode_private_key(attributes, n_attributes, key_type, arena,
                                  &encoded_key_item, &nss_db_attr_present);
+    } else {
+        dbg_trace("This should never happen, given is_importable_exportable() "
+                  "was previously called\n  key_class = " CKO_FMT,
+                  key_class);
+        return_with_cleanup(CKR_GENERAL_ERROR);
     }
     if (ret != CKR_OK) {
-        goto cleanup;
+        return_with_cleanup(ret);
     }
 
     // Encrypt.
@@ -225,9 +232,9 @@ CK_RV import_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
         dbg_trace("C_EncryptInit has failed with ret = " CKR_FMT, ret);
         return_with_cleanup(CKR_GENERAL_ERROR);
     }
-    p11_allocation_idiom(P11.C_Encrypt, encrypted_key, encrypted_key_len,
-                         IEK.session, encoded_key_item.data,
-                         encoded_key_item.len);
+    p11_call_with_allocation(P11.C_Encrypt, encrypted_key, encrypted_key_len,
+                             IEK.session, encoded_key_item.data,
+                             encoded_key_item.len);
     dbg_trace("Called C_Encrypt() to import the key\n  "
               "encoded_key_item.len = %u, encrypted_key_len = %lu, "
               "ret = " CKR_FMT,

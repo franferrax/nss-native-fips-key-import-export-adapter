@@ -34,7 +34,7 @@
 
 // Implements the "Conventions for functions returning output
 // in a variable-length buffer" (PKCS #11 v3.0 Section 5.2).
-#define p11_allocation_idiom(P11_Func, data, data_len, ...)                    \
+#define p11_call_with_allocation(P11_Func, data, data_len, ...)                \
     do {                                                                       \
         ret = P11_Func(__VA_ARGS__, NULL, &(data_len));                        \
         if (ret != CKR_OK) {                                                   \

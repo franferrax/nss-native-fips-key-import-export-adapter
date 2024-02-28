@@ -62,7 +62,7 @@ static inline bool get_key_type_from_attrs(CK_ATTRIBUTE_PTR attributes,
             }
         }
     }
-    dbg_trace("key: class = " CKO_FMT ", type = " CKK_FMT, *key_class,
+    dbg_trace("key_class = " CKO_FMT ", key_type = " CKK_FMT, *key_class,
               *key_type);
     return has_key_class && has_key_type;
 }
@@ -78,8 +78,8 @@ static inline bool get_key_type_from_object(CK_SESSION_HANDLE session,
     CK_RV ret = P11.C_GetAttributeValue(session, key_id, attributes,
                                         attrs_count(attributes));
     if (ret == CKR_OK) {
-        dbg_trace("key: id = %lu, class = " CKO_FMT ", type = " CKK_FMT, key_id,
-                  *key_class, *key_type);
+        dbg_trace("key_id = %lu, key_class = " CKO_FMT ", key_type = " CKK_FMT,
+                  key_id, *key_class, *key_type);
         return true;
     } else {
         dbg_trace("C_GetAttributeValue() call failed with ret = " CKR_FMT, ret);

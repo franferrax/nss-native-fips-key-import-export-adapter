@@ -142,7 +142,9 @@ static CK_RV decode_and_store_private_key(CK_KEY_TYPE key_type,
         dbg_trace("Successfully decoded EC private key");
         break;
     default:
-        dbg_trace("Unknown key type: " CKK_FMT, key_type);
+        dbg_trace("This should never happen, given is_importable_exportable() "
+                  "was previously called\n  key_type = " CKK_FMT,
+                  key_type);
         return CKR_GENERAL_ERROR;
     }
     return CKR_OK;
@@ -159,8 +161,8 @@ static CK_RV export_and_store_key_in_tls(CK_OBJECT_CLASS key_class,
     CK_ULONG encrypted_key_len = 0;
 
     // Wrap.
-    p11_allocation_idiom(P11.C_WrapKey, encrypted_key, encrypted_key_len,
-                         IEK.session, &IEK.mech, IEK.id, key_id);
+    p11_call_with_allocation(P11.C_WrapKey, encrypted_key, encrypted_key_len,
+                             IEK.session, &IEK.mech, IEK.id, key_id);
     dbg_trace("Called C_WrapKey() to export the key\n  "
               "encrypted_key_len = %lu, ret = " CKR_FMT,
               encrypted_key_len, ret);
@@ -174,8 +176,8 @@ static CK_RV export_and_store_key_in_tls(CK_OBJECT_CLASS key_class,
         dbg_trace("C_DecryptInit has failed with ret = " CKR_FMT, ret);
         return_with_cleanup(CKR_GENERAL_ERROR);
     }
-    p11_allocation_idiom(P11.C_Decrypt, encoded_key, encoded_key_len,
-                         IEK.session, encrypted_key, encrypted_key_len);
+    p11_call_with_allocation(P11.C_Decrypt, encoded_key, encoded_key_len,
+                             IEK.session, encrypted_key, encrypted_key_len);
     dbg_trace("Called C_Decrypt() to export the key\n  encoded_key_len = %lu, "
               "ret = " CKR_FMT,
               encoded_key_len, ret);
@@ -186,7 +188,7 @@ static CK_RV export_and_store_key_in_tls(CK_OBJECT_CLASS key_class,
     // Decode and store.
     if (key_class == CKO_SECRET_KEY) {
         ret = decode_and_store_secret_key(&encoded_key, encoded_key_len);
-    } else { // CKO_PRIVATE_KEY, guaranteed by is_importable_exportable().
+    } else if (key_class == CKO_PRIVATE_KEY) {
         if (encoded_key_len > UINT_MAX) {
             dbg_trace("Too big encoded key (%lu bytes)", encoded_key_len);
             return_with_cleanup(CKR_GENERAL_ERROR);
@@ -199,6 +201,11 @@ static CK_RV export_and_store_key_in_tls(CK_OBJECT_CLASS key_class,
             return_with_cleanup(CKR_HOST_MEMORY);
         }
         ret = decode_and_store_private_key(key_type, arena, &encoded_key_item);
+    } else {
+        dbg_trace("This should never happen, given is_importable_exportable() "
+                  "was previously called\n  key_class = " CKO_FMT,
+                  key_class);
+        return_with_cleanup(CKR_GENERAL_ERROR);
     }
     if (ret == CKR_OK) {
         cached_attrs_initialized = true;
