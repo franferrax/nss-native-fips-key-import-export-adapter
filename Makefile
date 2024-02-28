@@ -9,9 +9,11 @@ DBG_SENTINEL := $(BIN_DIR)/_built_in_debug_mode_
 
 JAVA          = java
 CC            = gcc
-LIBS          = pthread softokn3 nss3
+LIBS          = pthread softokn3 nss3 freebl
+STATIC_SYMS   = EC_FillParams
 INCLUDES      = /usr/include/nspr4
-CFLAGS        = -shared -fPIC -fvisibility=hidden $(addprefix -l,$(LIBS))      \
+CFLAGS        = -shared -fPIC -fvisibility=hidden                              \
+                $(addprefix -u,$(STATIC_SYMS)) $(addprefix -l,$(LIBS))         \
                 $(addprefix -I,$(INCLUDES)) -D_GNU_SOURCE -Wpedantic -Wall     \
                 -Wextra -Wconversion -Werror
 REL_CFLAGS    = -O3

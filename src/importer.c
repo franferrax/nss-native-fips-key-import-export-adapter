@@ -4,6 +4,7 @@
 #include "dbg_trace.h"
 #include "p11_util.h"
 #include <limits.h>
+#include <nss3/blapi.h>
 #include <nss3/lowkeyi.h>
 #include <nss3/secasn1.h>
 #include <nss3/secder.h>
@@ -11,6 +12,10 @@
 
 #define __nth_attr_to_SECItem(attr_type, sec_item)                             \
     do {                                                                       \
+        if (attributes[n].pValue == NULL) {                                    \
+            dbg_trace_attr(#attr_type " has no data", attributes[n]);          \
+            return CKR_GENERAL_ERROR;                                          \
+        }                                                                      \
         if (attributes[n].ulValueLen > UINT_MAX) {                             \
             dbg_trace_attr(#attr_type " is too big", attributes[n]);           \
             return CKR_GENERAL_ERROR;                                          \
@@ -22,10 +27,6 @@
 #define __attr_case(attr_type, sec_item)                                       \
     case (attr_type):                                                          \
         found_attrs++;                                                         \
-        if (attributes[n].pValue == NULL) {                                    \
-            dbg_trace_attr(#attr_type " has no data", attributes[n]);          \
-            return CKR_GENERAL_ERROR;                                          \
-        }                                                                      \
         __nth_attr_to_SECItem(attr_type, (sec_item));                          \
         break
 
@@ -33,7 +34,7 @@ static CK_RV encode_secret_key(CK_ATTRIBUTE_PTR attributes,
                                CK_ULONG n_attributes,
                                SECItem *encoded_key_item) {
     for (size_t n = 0; n < n_attributes; n++) {
-        if (attributes[n].type == CKA_VALUE && attributes[n].pValue != NULL) {
+        if (attributes[n].type == CKA_VALUE) {
             __nth_attr_to_SECItem(CKA_VALUE, *encoded_key_item);
             return CKR_OK;
         }
@@ -46,8 +47,8 @@ static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
                                 CK_ULONG n_attributes, CK_KEY_TYPE key_type,
                                 PLArenaPool *arena, SECItem *encoded_key_item,
                                 bool *nss_db_attr_present) {
-    SECItem *params = NULL;
     CK_ULONG found_attrs = 0;
+    SECItem *alg_params = NULL;
     SECOidTag alg_tag = SEC_OID_UNKNOWN;
     NSSLOWKEYPrivateKeyInfo *pki;
     NSSLOWKEYPrivateKey *lpk;
@@ -57,15 +58,21 @@ static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
 
     switch (key_type) {
     case CKK_RSA:
+        // For a RSA key to have the CKA_PUBLIC_KEY_INFO attribute when calling
+        // C_CreateObject(), it has to be present in the attributes template.
+        // In such case, we forward this attribute to C_UnwrapKey(). To avoid
+        // CKA_PUBLIC_KEY_INFO being overwritten by C_UnwrapKey() with a value
+        // taken from NSSLOWKEYPrivateKeyInfo (pki), we leave alg_params as
+        // NULL and set alg_tag to SEC_OID_PKCS1_RSA_ENCRYPTION -instead of
+        // SEC_OID_PKCS1_RSA_PSS_SIGNATURE-.
         alg_tag = SEC_OID_PKCS1_RSA_ENCRYPTION;
         lpk->keyType = NSSLOWKEYRSAKey;
         lpk->u.rsa.arena = arena;
         if (DER_SetUInteger(arena, &lpk->u.rsa.version,
                             NSSLOWKEY_PRIVATE_KEY_INFO_VERSION) != SECSuccess) {
             dbg_trace("Failed to encode the RSA private key version");
-            return CKR_GENERAL_ERROR;
+            return CKR_HOST_MEMORY;
         }
-        prepare_low_rsa_priv_key_for_asn1(lpk);
         found_attrs = 0;
         for (size_t n = 0; n < n_attributes; n++) {
             switch (attributes[n].type) {
@@ -85,6 +92,7 @@ static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
             dbg_trace("Too few attributes for an RSA private key");
             return CKR_TEMPLATE_INCOMPLETE;
         }
+        prepare_low_rsa_priv_key_for_asn1(lpk);
         if (SEC_ASN1EncodeItem(arena, &pki->privateKey, lpk,
                                nsslowkey_RSAPrivateKeyTemplate) == NULL) {
             dbg_trace("Failed to encode the RSA private key");
@@ -96,8 +104,6 @@ static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
         alg_tag = SEC_OID_ANSIX9_DSA_SIGNATURE;
         lpk->keyType = NSSLOWKEYDSAKey;
         lpk->u.dsa.params.arena = arena;
-        prepare_low_dsa_priv_key_export_for_asn1(lpk);
-        prepare_low_pqg_params_for_asn1(&lpk->u.dsa.params);
         found_attrs = 0;
         for (size_t n = 0; n < n_attributes; n++) {
             switch (attributes[n].type) {
@@ -116,15 +122,17 @@ static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
             dbg_trace("Too few attributes for a DSA private key");
             return CKR_TEMPLATE_INCOMPLETE;
         }
-        params = SEC_ASN1EncodeItem(arena, NULL, &lpk->u.dsa.params,
-                                    nsslowkey_PQGParamsTemplate);
-        if (params == NULL) {
-            dbg_trace("Failed to encode the DSA private key PQG params");
-            return CKR_GENERAL_ERROR;
-        }
+        prepare_low_dsa_priv_key_export_for_asn1(lpk);
         if (SEC_ASN1EncodeItem(arena, &pki->privateKey, lpk,
                                nsslowkey_DSAPrivateKeyExportTemplate) == NULL) {
             dbg_trace("Failed to encode the DSA private key");
+            return CKR_GENERAL_ERROR;
+        }
+        prepare_low_pqg_params_for_asn1(&lpk->u.dsa.params);
+        alg_params = SEC_ASN1EncodeItem(arena, NULL, &lpk->u.dsa.params,
+                                        nsslowkey_PQGParamsTemplate);
+        if (alg_params == NULL) {
+            dbg_trace("Failed to encode the DSA private key PQG params");
             return CKR_GENERAL_ERROR;
         }
         dbg_trace("Successfully encoded DSA private key");
@@ -136,9 +144,8 @@ static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
         if (DER_SetUInteger(arena, &lpk->u.ec.version,
                             NSSLOWKEY_EC_PRIVATE_KEY_VERSION) != SECSuccess) {
             dbg_trace("Failed to encode the EC private key version");
-            return CKR_GENERAL_ERROR;
+            return CKR_HOST_MEMORY;
         }
-        prepare_low_ec_priv_key_for_asn1(lpk);
         found_attrs = 0;
         for (size_t n = 0; n < n_attributes; n++) {
             switch (attributes[n].type) {
@@ -146,6 +153,7 @@ static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
                 __attr_case(CKA_VALUE, lpk->u.ec.privateValue);
             case CKA_NSS_DB:
                 *nss_db_attr_present = true;
+                __nth_attr_to_SECItem(CKA_NSS_DB, lpk->u.ec.publicValue);
                 break;
             default:
                 break;
@@ -155,11 +163,34 @@ static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
             dbg_trace("Too few attributes for an EC private key");
             return CKR_TEMPLATE_INCOMPLETE;
         }
-        params = SECITEM_ArenaDupItem(arena, &lpk->u.ec.ecParams.DEREncoding);
+        if (EC_FillParams(arena, &lpk->u.ec.ecParams.DEREncoding,
+                          &lpk->u.ec.ecParams) != SECSuccess) {
+            dbg_trace("Failed to fill the EC params");
+            return CKR_GENERAL_ERROR;
+        }
+        prepare_low_ec_priv_key_for_asn1(lpk);
+        // Public value is encoded as a bit string so adjust length
+        // to be in bits before ASN encoding and readjust
+        // immediately after.
+        //
+        // Since the SECG specification recommends not including the
+        // parameters as part of ECPrivateKey, we zero out the curveOID
+        // length before encoding and restore it later.
+        unsigned int saved_len = lpk->u.ec.ecParams.curveOID.len;
+        lpk->u.ec.ecParams.curveOID.len = 0;
+        lpk->u.ec.publicValue.len <<= 3;
         if (SEC_ASN1EncodeItem(arena, &pki->privateKey, lpk,
                                nsslowkey_ECPrivateKeyTemplate) == NULL) {
             dbg_trace("Failed to encode the EC private key");
             return CKR_GENERAL_ERROR;
+        }
+        lpk->u.ec.publicValue.len >>= 3;
+        lpk->u.ec.ecParams.curveOID.len = saved_len;
+        alg_params =
+            SECITEM_ArenaDupItem(arena, &lpk->u.ec.ecParams.DEREncoding);
+        if (alg_params == NULL) {
+            dbg_trace("Failed to duplicate the DER encoded EC params");
+            return CKR_HOST_MEMORY;
         }
         dbg_trace("Successfully encoded EC private key");
         break;
@@ -170,7 +201,7 @@ static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
         return CKR_GENERAL_ERROR;
     }
 
-    if (SECOID_SetAlgorithmID(arena, &pki->algorithm, alg_tag, params) !=
+    if (SECOID_SetAlgorithmID(arena, &pki->algorithm, alg_tag, alg_params) !=
         SECSuccess) {
         dbg_trace("Failed to encode the private key algorithm");
         return CKR_GENERAL_ERROR;
@@ -178,7 +209,7 @@ static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
     if (SEC_ASN1EncodeInteger(arena, &pki->version,
                               NSSLOWKEY_PRIVATE_KEY_INFO_VERSION) == NULL) {
         dbg_trace("Failed to encode the private key version");
-        return CKR_GENERAL_ERROR;
+        return CKR_HOST_MEMORY;
     }
     if (SEC_ASN1EncodeItem(arena, encoded_key_item, pki,
                            nsslowkey_PrivateKeyInfoTemplate) == NULL) {
@@ -263,7 +294,7 @@ CK_RV import_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
                           encrypted_key_len, attributes, n_attributes, key_id);
     dbg_trace("Called C_UnwrapKey() to import the key\n  "
               "imported key_id = %lu, ret = " CKR_FMT,
-              *key_id, ret);
+              ret == CKR_OK ? *key_id : CK_INVALID_HANDLE, ret);
 
 cleanup:
     if (modified_attrs != NULL) {

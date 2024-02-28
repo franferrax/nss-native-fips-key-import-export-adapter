@@ -47,7 +47,7 @@ const SEC_ASN1Template nsslowkey_PrivateKeyInfoTemplate[] = {
 };
 
 /*
-https://github.com/nss-dev/nss/blob/NSS_3_97_RTM/lib/softoken/lowkey.c#L65-L85
+https://github.com/nss-dev/nss/blob/NSS_3_97_RTM/lib/softoken/lowkey.c#L65-L71
  */
 const SEC_ASN1Template nsslowkey_PQGParamsTemplate[] = {
     { SEC_ASN1_SEQUENCE, 0, NULL, sizeof(PQGParams) },
@@ -57,6 +57,9 @@ const SEC_ASN1Template nsslowkey_PQGParamsTemplate[] = {
     { 0 }
 };
 
+/*
+https://github.com/nss-dev/nss/blob/NSS_3_97_RTM/lib/softoken/lowkey.c#L73-L85
+ */
 const SEC_ASN1Template nsslowkey_RSAPrivateKeyTemplate[] = {
     { SEC_ASN1_SEQUENCE, 0, NULL, sizeof(NSSLOWKEYPrivateKey) },
     { SEC_ASN1_INTEGER, offsetof(NSSLOWKEYPrivateKey, u.rsa.version) },
