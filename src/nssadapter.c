@@ -5,6 +5,7 @@
 #include "exporter.h"
 #include "importer.h"
 #include "p11_util.h"
+#include <nss3/nss.h>
 #include <nss3/pkcs11.h>
 
 /* ****************************************************************************
@@ -21,6 +22,8 @@ static global_data_t global_data = {
                               .id = CK_INVALID_HANDLE,
                               .mech = {CKM_AES_CBC_PAD, &iv, sizeof(iv)}},
 };
+
+static bool nss_initialization_failed = false;
 
 // CK_INTERFACE and CK_FUNCTION_LIST_3_0 for return to OpenJDK.
 // decorated_func_list includes pointers to either NSS functions or the
@@ -105,20 +108,9 @@ static CK_RV initialize_importer_exporter() {
         return CKR_OK;
     }
 
-    // Call C_GetTokenInfo() to trigger NSS FIPS level initialization. When no
-    // DB is configured, level is 1 and no login is required.
-    CK_TOKEN_INFO info;
-    CK_RV ret = P11.C_GetTokenInfo(FIPS_SLOT_ID, &info);
-    dbg_trace("Called C_GetTokenInfo() to remove the login requirement\n  "
-              "ret = " CKR_FMT,
-              ret);
-    if (ret != CKR_OK) {
-        return ret;
-    }
-
     // Create importer / exporter session.
-    ret = P11.C_OpenSession(FIPS_SLOT_ID, CKF_SERIAL_SESSION, NULL, NULL,
-                            &IEK.session);
+    CK_RV ret = P11.C_OpenSession(FIPS_SLOT_ID, CKF_SERIAL_SESSION, NULL, NULL,
+                                  &IEK.session);
     dbg_trace("Called C_OpenSession() to create the session for the "
               "import / export key\n  IEK.session = 0x%08lx, ret = " CKR_FMT,
               IEK.session, ret);
@@ -152,7 +144,7 @@ CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
     CK_RV ret = P11.C_Initialize(pInitArgs);
     dbg_trace("Forwarded to NSS function\n  pInitArgs = %p, ret = " CKR_FMT,
               pInitArgs, ret);
-    if (ret == CKR_OK) {
+    if (ret == CKR_OK || ret == CKR_CRYPTOKI_ALREADY_INITIALIZED) {
         // This method is called from OpenJDK's PKCS11::getInstance(), which is
         // synchronized. initialize_importer_exporter() can be called at this
         // point without concurrency issues.
@@ -217,6 +209,10 @@ EXPORTED_FUNCTION CK_RV C_GetInterface(CK_UTF8CHAR_PTR pInterfaceName,
     dbg_trace("Adapting NSS interface\n  pInterfaceName = \"%s\", "
               "pVersion = %p, ppInterface = %p, flags = %lu",
               pInterfaceName, (void *)pVersion, (void *)ppInterface, flags);
+    if (nss_initialization_failed) {
+        dbg_trace("NSS Initialization failed");
+        return CKR_GENERAL_ERROR;
+    }
     if (pInterfaceName != NULL) {
         dbg_trace("Only the default interface is supported by this adapter");
         return CKR_GENERAL_ERROR;
@@ -274,6 +270,12 @@ C_GetFunctionList(CK_FUNCTION_LIST_PTR_PTR ppFunctionList) {
 
 static void CONSTRUCTOR_FUNCTION library_constructor(void) {
     dbg_initialize();
+    SECStatus res = NSS_NoDB_Init(NULL);
+    if (res != SECSuccess) {
+        // NOTE: SECWouldBlock = -2, SECFailure = -1, SECSuccess = 0.
+        dbg_trace("NSS_NoDB_Init() has failed with res = %d", res);
+        nss_initialization_failed = true;
+    }
 }
 
 static void DESTRUCTOR_FUNCTION library_destructor(void) {

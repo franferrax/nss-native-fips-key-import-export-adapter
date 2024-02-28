@@ -67,7 +67,6 @@ public final class Main {
                 + lf + "library = " + lib.toRealPath()
                 + lf + "slot = 3"
                 + lf + "nssUseSecmod = false"
-                + lf + "nssArgs = \"flags=noCertDB,noModDB,forceOpen\""
                 + lf + "attributes(*,CKO_SECRET_KEY,CKK_GENERIC_SECRET)=" +
                 "{ CKA_SIGN=true }";
 
