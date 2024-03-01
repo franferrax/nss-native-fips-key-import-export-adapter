@@ -1,13 +1,26 @@
-# OPENJDK-2135: NSS FIPS Key Import Export Adapter
+# OPENJDK-2135: NSS Native FIPS Key Import Export Adapter
 
-This native library works as an adapter / wrapper / decorator for the NSS
-PKCS&nbsp;#&#8203;11 software token (`libsoftokn3.so`), enabling import and
-export of plain key material when in FIPS mode.
+This native library is an adapter for OpenJDK to use the NSS
+PKCS&nbsp;#&#8203;11 software token (`libsoftokn3.so`) in FIPS mode and provides
+support to import and export secret and private key material in plain.
+This enables Java applications to manage PKCS&nbsp;#&#8203;12 key stores through
+the `java.security.KeyStore` API and benefit from FIPS-certified cryptography.
+Note: this library replaces the Java FIPS Key Importer Exporter in _Red Hat
+builds of OpenJDK_ ([FIPSKeyImporter.java]).
 
-This shared object dynamically links against `libsoftokn3.so` and `libnss3.so`,
-and is intended to work as a replacement for the Java (old) importer / exporter
-([FIPSKeyImporter.java]). In order to use it with a desired JDK, in must be
-configured as the _SunPKCS11_ backend.
+The `libnssadapter.so` shared object provided by this library dynamically links
+`libsoftokn3.so` and `libnss3.so`. Thus, a Linux operating system with the NSS
+package installed is required.
+
+In order to use this library with OpenJDK, the _SunPKCS11_ security provider
+must be initialized with the following configuration (e.g. `nss.cfg`):
+
+```
+name = NSS-FIPS
+library = /path/to/libnssadapter.so
+slot = 3
+nssUseSecmode = false
+```
 
 ## Makefile
 
@@ -20,17 +33,17 @@ The Makefile has support for:
     * This test suite ensures the system is in FIPS mode, and is known to work
       with _Temurin_ builds of _OpenJDK_ 8, 11, 17 and 21
 
-To see a help message with all the `make` targets and a brief description,
-invoke `make help`.
+To see a help message with all the `make` targets and a brief description invoke
+`make help`.
 
 
 ## Debugging traces
 
-The NSS adapter library implements a simple logging system for both development
-and future customer troubleshooting. The log facility has support for colored
-terminal output (ANSI escape codes) and can write messages to either `stderr` or
-a custom file. This utility is controlled by the `NSS_ADAPTER_DEBUG` environment
-variable:
+This library implements logging functionality for both development and release
+troubleshooting. Logging supports colored terminal output (ANSI escape codes)
+and either displaying messages on `stderr` or recording them to a file. The
+`NSS_ADAPTER_DEBUG` environment variable can be set to control logging output
+as follows:
 
 * `NSS_ADAPTER_DEBUG=no`: debug traces are disabled (default in RELEASE builds)
 * `NSS_ADAPTER_DEBUG=yes`: debug traces are enabled, writing to `stderr`
@@ -40,13 +53,12 @@ variable:
 * `NSS_ADAPTER_DEBUG=yes:/tmp/trace.txt` or
   `NSS_ADAPTER_DEBUG=color:/tmp/trace.txt`: debug traces are enabled, writing to
   the specified file
-    * Even being a file, ANSI escape color codes are used in the second form
     * The file is opened in append mode
-    * If an error occurs while trying to open the file, it is logged to `stderr`
+    * If an error occurs while opening the file, the error is logged to `stderr`
       and debug traces are disabled
 
-When built in DEBUG mode, sensitive PKCS&nbsp;#&#8203;11 attribute values are
-logged, i.e. the plain keys! When built in RELEASE mode, there is code to avoid
-logging customer secret or private key material.
+When the library is built in DEBUG mode, sensitive PKCS&nbsp;#&#8203;11
+attribute values are logged, i.e. plain keys! When the library is built in
+RELEASE mode, secret and private key material is not logged.
 
 [FIPSKeyImporter.java]: https://github.com/rh-openjdk/jdk/blob/75ffdc48edad8795cfaf2fa31c743396d9054534/src/jdk.crypto.cryptoki/share/classes/sun/security/pkcs11/FIPSKeyImporter.java "fips-21u@rh-openjdk/jdk"
