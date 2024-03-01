@@ -2,9 +2,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include <nss3/lowkeyti.h>
-#include <nss3/secasn1.h>
-#include <nss3/secoid.h>
+#include <lowkeyti.h>
+#include <secasn1.h>
+#include <secoid.h>
 
 /*
 These templates and functions are taken from lib/softoken/lowkey.c in NSS v3.97

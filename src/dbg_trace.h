@@ -3,7 +3,7 @@
 #ifndef DBG_TRACE_H
 #define DBG_TRACE_H
 
-#include <nss3/pkcs11.h>
+#include <pkcs11.h>
 #include <stdbool.h>
 #include <stdio.h>
 

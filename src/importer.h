@@ -4,7 +4,7 @@
 #define IMPORTER_H
 
 #include "nssadapter.h"
-#include <nss3/pkcs11.h>
+#include <pkcs11.h>
 
 CK_RV import_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
                  CK_SESSION_HANDLE session, CK_ATTRIBUTE_PTR attributes,

@@ -3,12 +3,12 @@
 #include "importer.h"
 #include "dbg_trace.h"
 #include "p11_util.h"
+#include <blapi.h>
 #include <limits.h>
-#include <nss3/blapi.h>
-#include <nss3/lowkeyi.h>
-#include <nss3/secasn1.h>
-#include <nss3/secder.h>
-#include <nss3/secoid.h>
+#include <lowkeyi.h>
+#include <secasn1.h>
+#include <secder.h>
+#include <secoid.h>
 
 #define __nth_attr_to_SECItem(attr_type, sec_item)                             \
     do {                                                                       \

@@ -3,7 +3,7 @@
 #ifndef NSS_ADAPTER_H
 #define NSS_ADAPTER_H
 
-#include <nss3/pkcs11.h>
+#include <pkcs11.h>
 
 // Shared library constructor/initializer and destructor/finalizer
 #define CONSTRUCTOR_FUNCTION __attribute__((constructor))

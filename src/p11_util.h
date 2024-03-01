@@ -4,9 +4,9 @@
 #define P11_UTIL_H
 
 #include "nssadapter.h"
+#include <lowkeyi.h>
 #include <memory.h>
-#include <nss3/lowkeyi.h>
-#include <nss3/pkcs11.h>
+#include <pkcs11.h>
 #include <stdbool.h>
 #include <stdlib.h>
 

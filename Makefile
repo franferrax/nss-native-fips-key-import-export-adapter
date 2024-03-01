@@ -9,13 +9,14 @@ DBG_SENTINEL := $(BIN_DIR)/_built_in_debug_mode_
 
 JAVA          = java
 CC            = gcc
-LIBS          = pthread softokn3 nss3 freebl
-STATIC_SYMS   = EC_FillParams
-INCLUDES      = /usr/include/nspr4
-CFLAGS        = -shared -fPIC -fvisibility=hidden                              \
-                $(addprefix -u,$(STATIC_SYMS)) $(addprefix -l,$(LIBS))         \
-                $(addprefix -I,$(INCLUDES)) -D_GNU_SOURCE -Wpedantic -Wall     \
-                -Wextra -Wconversion -Werror
+DEVEL_PKGS    = nss nss-softokn
+LIB_DIR       = $(shell pkg-config --variable=libdir nss-softokn)
+SHARED_LIBS   = pthread softokn3 nss3
+STATIC_LIBS   = freebl
+CFLAGS        = -shared -fPIC -fvisibility=hidden -D_GNU_SOURCE                \
+                $(addprefix -l,$(SHARED_LIBS))                                 \
+                $(shell pkg-config --cflags $(DEVEL_PKGS))                     \
+                -Wpedantic -Wall -Wextra -Wconversion -Werror
 REL_CFLAGS    = -O3
 DBG_CFLAGS    = -Wno-error=unused-variable -Wno-error=unused-parameter -DDEBUG \
                 -O0 -g
@@ -42,24 +43,24 @@ CLANG_FORMAT_IGNORED_FILES = $(SRC_DIR)/nss_lowkey_imported.c                  \
 
 SRC_FILES = $(wildcard $(SRC_DIR)/*.h) $(wildcard $(SRC_DIR)/*.c)
 ifeq ($(wildcard $(DBG_SENTINEL)),$(DBG_SENTINEL))
-  BUILT_MODE = debug
-  CLEAN_IF_BUILT_MODE_IS_DEBUG = clean
+  PREVIOUS_BUILD_MODE = debug
+  CLEAN_IF_PREVIOUS_BUILD_MODE_IS_DEBUG = clean
 else
-  BUILT_MODE = release
-  CLEAN_IF_BUILT_MODE_IS_RELEASE = clean
+  PREVIOUS_BUILD_MODE = release
+  CLEAN_IF_PREVIOUS_BUILD_MODE_IS_RELEASE = clean
 endif
 
 .PHONY: release ## Build in RELEASE mode (default)
 release: CFLAGS += $(REL_CFLAGS)
-release: $(CLEAN_IF_BUILT_MODE_IS_DEBUG) $(OUTPUT)
+release: $(CLEAN_IF_PREVIOUS_BUILD_MODE_IS_DEBUG) $(OUTPUT)
 
 .PHONY: debug ## Build in DEBUG mode
 debug: CFLAGS += $(DBG_CFLAGS)
 debug: CREATE_DBG_SENTINEL_IF_NEEDED = touch $(DBG_SENTINEL)
-debug: $(CLEAN_IF_BUILT_MODE_IS_RELEASE) $(OUTPUT)
+debug: $(CLEAN_IF_PREVIOUS_BUILD_MODE_IS_RELEASE) $(OUTPUT)
 
 .PHONY: rebuild ## Force a rebuild in the previous mode (RELEASE if not built)
-rebuild: clean $(BUILT_MODE)
+rebuild: clean $(PREVIOUS_BUILD_MODE)
 
 .PHONY: clean ## Remove binaries and artifacts
 clean:
@@ -71,7 +72,8 @@ $(BIN_DIR):
 
 $(OUTPUT): $(BIN_DIR) $(SRC_FILES)
 	@$(CREATE_DBG_SENTINEL_IF_NEEDED)
-	$(CC) $(CFLAGS) $(filter %.c, $+) -o $@
+	$(CC) $(CFLAGS) $(filter %.c, $+) $(addprefix $(LIB_DIR)/lib,              \
+	                                    $(addsuffix .a,$(STATIC_LIBS))) -o $@
 
 
 #
@@ -86,7 +88,7 @@ format:
 	         "by the 'clang-tools-extra' package." 1>&2
 
 .PHONY: info ## Show built binary information (build mode, linkage and symbols)
-info: $(BUILT_MODE)
+info: $(PREVIOUS_BUILD_MODE)
 	@echo
 	@test -f $(DBG_SENTINEL) && echo "Built in DEBUG mode" ||                  \
 	                            echo "Built in RELEASE mode"
@@ -97,7 +99,7 @@ info: $(BUILT_MODE)
 	@echo
 
 .PHONY: test ## Run the test suite, usage: make test [JAVA=/path/to/java]
-test: $(BUILT_MODE)
+test: $(PREVIOUS_BUILD_MODE)
 	$(JAVA)c -d $(BIN_DIR) $(TST_DIR)/Main.java &&                             \
 	$(JAVA) -cp $(BIN_DIR) Main $(OUTPUT)
 

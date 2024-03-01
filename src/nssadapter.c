@@ -5,8 +5,8 @@
 #include "exporter.h"
 #include "importer.h"
 #include "p11_util.h"
-#include <nss3/nss.h>
-#include <nss3/pkcs11.h>
+#include <nss.h>
+#include <pkcs11.h>
 
 /* ****************************************************************************
  * Global importer / exporter data

@@ -4,9 +4,9 @@
 #include "dbg_trace.h"
 #include "p11_util.h"
 #include <limits.h>
-#include <nss3/lowkeyi.h>
-#include <nss3/secasn1.h>
-#include <nss3/secoid.h>
+#include <lowkeyi.h>
+#include <secasn1.h>
+#include <secoid.h>
 
 // OpenJDK's libj2pkcs11 follows the "Conventions for functions returning output
 // in a variable-length buffer" (PKCS #11 v3.0 Section 5.2). Keep state between
