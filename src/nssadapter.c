@@ -70,19 +70,25 @@ static inline bool get_key_type_from_attrs(CK_ATTRIBUTE_PTR attributes,
     return has_key_class && has_key_type;
 }
 
-static inline bool get_key_type_from_object(CK_SESSION_HANDLE session,
+static inline bool get_key_data_from_object(CK_SESSION_HANDLE session,
                                             CK_OBJECT_HANDLE key_id,
-                                            CK_OBJECT_CLASS *key_class,
-                                            CK_KEY_TYPE *key_type) {
+                                            key_data_t *key_data) {
     CK_ATTRIBUTE attributes[] = {
-        {CKA_CLASS,    key_class, sizeof(CK_OBJECT_CLASS)},
-        {CKA_KEY_TYPE, key_type,  sizeof(CK_KEY_TYPE)    },
+        {CKA_CLASS,       &key_data->class,       sizeof(CK_OBJECT_CLASS)},
+        {CKA_KEY_TYPE,    &key_data->type,        sizeof(CK_KEY_TYPE)    },
+        {CKA_TOKEN,       &key_data->token,       sizeof(CK_BBOOL)       },
+        {CKA_SENSITIVE,   &key_data->sensitive,   sizeof(CK_BBOOL)       },
+        {CKA_EXTRACTABLE, &key_data->extractable, sizeof(CK_BBOOL)       },
     };
     CK_RV ret = P11.C_GetAttributeValue(session, key_id, attributes,
                                         attrs_count(attributes));
     if (ret == CKR_OK) {
-        dbg_trace("key_id = %lu, key_class = " CKO_FMT ", key_type = " CKK_FMT,
-                  key_id, *key_class, *key_type);
+        dbg_trace("session = 0x%08lx, key_id = %lu, obtained data:\n  "
+                  "key_data.class = " CKO_FMT ", key_data.type = " CKK_FMT ", "
+                  "key_data.token = %u, key_data.sensitive = %u, "
+                  "key_data.extractable = %u",
+                  session, key_id, key_data->class, key_data->type,
+                  key_data->token, key_data->sensitive, key_data->extractable);
         return true;
     } else {
         dbg_trace("C_GetAttributeValue() call failed with ret = " CKR_FMT, ret);
@@ -163,16 +169,17 @@ CK_RV C_CreateObject(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTemplate,
                      CK_ULONG ulCount, CK_OBJECT_HANDLE_PTR phObject) {
     CK_OBJECT_CLASS keyClass = (CK_OBJECT_CLASS)-1;
     CK_KEY_TYPE keyType = (CK_KEY_TYPE)-1;
-    if (!get_key_type_from_attrs(pTemplate, ulCount, &keyClass, &keyType) ||
-        !is_importable_exportable(keyClass, keyType)) {
-        dbg_trace("There is no support for importing this key, forwarding to "
-                  "NSS\n  hSession = 0x%08lx, pTemplate = %p, ulCount = %lu, "
-                  "phObject = %p",
-                  hSession, (void *)pTemplate, ulCount, (void *)phObject);
-        return P11.C_CreateObject(hSession, pTemplate, ulCount, phObject);
+    if (get_key_type_from_attrs(pTemplate, ulCount, &keyClass, &keyType) &&
+        is_importable_exportable(keyClass, keyType)) {
+        // Intercept call.
+        return import_key(keyClass, keyType, hSession, pTemplate, ulCount,
+                          phObject);
     }
-    return import_key(keyClass, keyType, hSession, pTemplate, ulCount,
-                      phObject);
+    dbg_trace("There is no support for importing this key, forwarding to NSS"
+              "\n  hSession = 0x%08lx, pTemplate = %p, ulCount = %lu, "
+              "phObject = %p",
+              hSession, (void *)pTemplate, ulCount, (void *)phObject);
+    return P11.C_CreateObject(hSession, pTemplate, ulCount, phObject);
 }
 
 /* ****************************************************************************
@@ -181,17 +188,31 @@ CK_RV C_CreateObject(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTemplate,
 
 CK_RV C_GetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
                           CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount) {
-    CK_OBJECT_CLASS keyClass = (CK_OBJECT_CLASS)-1;
-    CK_KEY_TYPE keyType = (CK_KEY_TYPE)-1;
-    if (!get_key_type_from_object(hSession, hObject, &keyClass, &keyType) ||
-        !is_importable_exportable(keyClass, keyType)) {
-        dbg_trace("There is no support for exporting this key, forwarding to "
-                  "NSS\n  hSession = 0x%08lx, hObject = %lu, pTemplate = %p, "
-                  "ulCount = %lu",
-                  hSession, hObject, (void *)pTemplate, ulCount);
-        return P11.C_GetAttributeValue(hSession, hObject, pTemplate, ulCount);
+    key_data_t keyData = {0};
+    if (get_key_data_from_object(hSession, hObject, &keyData) &&
+        is_importable_exportable(keyData.class, keyData.type)) {
+        // Based on our FIPS configuration (FIPS enabled and no-DB), token
+        // should be CK_FALSE and sensitive should be CK_TRUE.
+        if (keyData.token == CK_TRUE) {
+            dbg_trace("Without an NSS DB, CKA_TOKEN should always be CK_FALSE");
+            return CKR_DEVICE_ERROR;
+        }
+        if (keyData.sensitive == CK_FALSE) {
+            dbg_trace("Non-sensitive key, this is unexpected in FIPS mode");
+            return CKR_DEVICE_ERROR;
+        }
+        if (keyData.extractable == CK_TRUE) {
+            // Intercept call.
+            return export_key(&keyData, hSession, hObject, pTemplate, ulCount);
+        } else {
+            dbg_trace("Let non-extractable key be handled as opaque");
+        }
     }
-    return export_key(keyClass, keyType, hSession, hObject, pTemplate, ulCount);
+    dbg_trace("There is no support for exporting this key, forwarding to NSS"
+              "\n  hSession = 0x%08lx, hObject = %lu, pTemplate = %p, "
+              "ulCount = %lu",
+              hSession, hObject, (void *)pTemplate, ulCount);
+    return P11.C_GetAttributeValue(hSession, hObject, pTemplate, ulCount);
 }
 
 /* ****************************************************************************

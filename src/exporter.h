@@ -6,8 +6,16 @@
 #include "nssadapter.h"
 #include <pkcs11.h>
 
-CK_RV export_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
-                 CK_SESSION_HANDLE session, CK_OBJECT_HANDLE key_id,
-                 CK_ATTRIBUTE_PTR attributes, CK_ULONG n_attributes);
+typedef struct {
+    CK_OBJECT_CLASS class;
+    CK_KEY_TYPE type;
+    CK_BBOOL token;
+    CK_BBOOL sensitive;
+    CK_BBOOL extractable;
+} key_data_t;
+
+CK_RV export_key(key_data_t *key_data, CK_SESSION_HANDLE session,
+                 CK_OBJECT_HANDLE key_id, CK_ATTRIBUTE_PTR attributes,
+                 CK_ULONG n_attributes);
 
 #endif // EXPORTER_H
