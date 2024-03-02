@@ -1,7 +1,7 @@
 # OPENJDK-2135: NSS Native FIPS Key Import Export Adapter
 
 This native library is an adapter for OpenJDK to use the NSS
-PKCS&nbsp;#&#8203;11 software token (`libsoftokn3.so`) in FIPS mode and provides
+PKCS&nbsp;#&#8203;11 software token (`libsoftokn3.so`) in FIPS mode. It provides
 support to import and export secret and private key material in plain.
 This enables Java applications to manage PKCS&nbsp;#&#8203;12 key stores through
 the `java.security.KeyStore` API and benefit from FIPS-certified cryptography.
