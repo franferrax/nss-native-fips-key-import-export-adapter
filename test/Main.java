@@ -93,28 +93,30 @@ public final class Main {
         initialize(args[0]);
         for (Method method : Main.class.getDeclaredMethods()) {
             if (method.getName().startsWith(TESTS_METHODS_PREFIX)) {
-                System.out.println(SEPARATOR);
+                printDescription(method);
                 method.invoke(null);
-                succeed(getDescription(method));
             }
         }
         System.out.println(SEPARATOR);
-        succeed("TEST PASS");
+        System.out.println("TEST PASS - OK");
     }
 
-    private static String getDescription(Method method) {
+    private static void printDescription(Method method) {
         String desc = method.getName().substring(TESTS_METHODS_PREFIX.length());
-        StringBuilder sb = new StringBuilder();
+        StringBuilder sb = new StringBuilder(SEPARATOR);
+        sb.append(System.lineSeparator());
+        int mark = sb.length();
+        sb.append(' ');
         for (String word : CAMEL_CASE_SPLITTER.split(desc)) {
             sb.append(word).append(' ');
         }
         sb.deleteCharAt(sb.length() - 1);
-        return sb.toString();
-    }
-
-    private static void succeed(String m) {
-        String line = String.join("", Collections.nCopies(m.length() + 5, "_"));
-        System.out.println(line + System.lineSeparator() + m + " - OK");
+        sb.append(System.lineSeparator());
+        mark -= sb.length();
+        while (mark++ < 0) {
+            sb.append('-');
+        }
+        System.out.println(sb);
     }
 
     private static void assertEquals(Object expected, Object actual,
