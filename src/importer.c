@@ -24,6 +24,20 @@
         (sec_item).len = (unsigned int)attributes[n].ulValueLen;               \
     } while (0)
 
+#define __for_each_attr_switch_by_its_type_and_validate_template(              \
+    switch_body, required_attrs, template_incomplete_message)                  \
+    do {                                                                       \
+        CK_ULONG found_attrs = 0;                                              \
+        for (size_t n = 0; n < n_attributes; n++) {                            \
+            switch (attributes[n].type)                                        \
+                switch_body                                                    \
+        }                                                                      \
+        if (found_attrs < (required_attrs)) {                                  \
+            dbg_trace(template_incomplete_message);                            \
+            return CKR_TEMPLATE_INCOMPLETE;                                    \
+        }                                                                      \
+    } while (0)
+
 #define __attr_case(attr_type, sec_item)                                       \
     case (attr_type):                                                          \
         found_attrs++;                                                         \
@@ -33,21 +47,18 @@
 static CK_RV encode_secret_key(CK_ATTRIBUTE_PTR attributes,
                                CK_ULONG n_attributes,
                                SECItem *encoded_key_item) {
-    for (size_t n = 0; n < n_attributes; n++) {
-        if (attributes[n].type == CKA_VALUE) {
-            __nth_attr_to_SECItem(CKA_VALUE, *encoded_key_item);
-            return CKR_OK;
-        }
-    }
-    dbg_trace("Unavailable attribute: CKA_VALUE");
-    return CKR_TEMPLATE_INCOMPLETE;
+    __for_each_attr_switch_by_its_type_and_validate_template(
+        {
+            __attr_case(CKA_VALUE, *encoded_key_item);
+        },
+        1, "Unavailable attribute: CKA_VALUE");
+    return CKR_OK;
 }
 
 static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
                                 CK_ULONG n_attributes, CK_KEY_TYPE key_type,
                                 PLArenaPool *arena, SECItem *encoded_key_item,
                                 bool *nss_db_attr_present) {
-    CK_ULONG found_attrs = 0;
     SECItem *alg_params = NULL;
     SECOidTag alg_tag = SEC_OID_UNKNOWN;
     NSSLOWKEYPrivateKeyInfo *pki;
@@ -73,9 +84,8 @@ static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
             dbg_trace("Failed to encode the RSA private key version");
             return CKR_HOST_MEMORY;
         }
-        found_attrs = 0;
-        for (size_t n = 0; n < n_attributes; n++) {
-            switch (attributes[n].type) {
+        __for_each_attr_switch_by_its_type_and_validate_template(
+            {
                 __attr_case(CKA_MODULUS, lpk->u.rsa.modulus);
                 __attr_case(CKA_PUBLIC_EXPONENT, lpk->u.rsa.publicExponent);
                 __attr_case(CKA_PRIVATE_EXPONENT, lpk->u.rsa.privateExponent);
@@ -84,12 +94,8 @@ static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
                 __attr_case(CKA_EXPONENT_1, lpk->u.rsa.exponent1);
                 __attr_case(CKA_EXPONENT_2, lpk->u.rsa.exponent2);
                 __attr_case(CKA_COEFFICIENT, lpk->u.rsa.coefficient);
-            }
-        }
-        if (found_attrs < 8) {
-            dbg_trace("Too few attributes for an RSA private key");
-            return CKR_TEMPLATE_INCOMPLETE;
-        }
+            },
+            8, "Too few attributes for an RSA private key");
         prepare_low_rsa_priv_key_for_asn1(lpk);
         if (SEC_ASN1EncodeItem(arena, &pki->privateKey, lpk,
                                nsslowkey_RSAPrivateKeyTemplate) == NULL) {
@@ -102,9 +108,8 @@ static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
         alg_tag = SEC_OID_ANSIX9_DSA_SIGNATURE;
         lpk->keyType = NSSLOWKEYDSAKey;
         lpk->u.dsa.params.arena = arena;
-        found_attrs = 0;
-        for (size_t n = 0; n < n_attributes; n++) {
-            switch (attributes[n].type) {
+        __for_each_attr_switch_by_its_type_and_validate_template(
+            {
                 __attr_case(CKA_PRIME, lpk->u.dsa.params.prime);
                 __attr_case(CKA_SUBPRIME, lpk->u.dsa.params.subPrime);
                 __attr_case(CKA_BASE, lpk->u.dsa.params.base);
@@ -112,12 +117,8 @@ static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
             case CKA_NSS_DB:
                 *nss_db_attr_present = true;
                 break;
-            }
-        }
-        if (found_attrs < 4) {
-            dbg_trace("Too few attributes for a DSA private key");
-            return CKR_TEMPLATE_INCOMPLETE;
-        }
+            },
+            4, "Too few attributes for a DSA private key");
         prepare_low_dsa_priv_key_export_for_asn1(lpk);
         if (SEC_ASN1EncodeItem(arena, &pki->privateKey, lpk,
                                nsslowkey_DSAPrivateKeyExportTemplate) == NULL) {
@@ -142,21 +143,16 @@ static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
             dbg_trace("Failed to encode the EC private key version");
             return CKR_HOST_MEMORY;
         }
-        found_attrs = 0;
-        for (size_t n = 0; n < n_attributes; n++) {
-            switch (attributes[n].type) {
+        __for_each_attr_switch_by_its_type_and_validate_template(
+            {
                 __attr_case(CKA_EC_PARAMS, lpk->u.ec.ecParams.DEREncoding);
                 __attr_case(CKA_VALUE, lpk->u.ec.privateValue);
             case CKA_NSS_DB:
                 *nss_db_attr_present = true;
                 __nth_attr_to_SECItem(CKA_NSS_DB, lpk->u.ec.publicValue);
                 break;
-            }
-        }
-        if (found_attrs < 2) {
-            dbg_trace("Too few attributes for an EC private key");
-            return CKR_TEMPLATE_INCOMPLETE;
-        }
+            },
+            2, "Too few attributes for an EC private key");
         if (EC_FillParams(arena, &lpk->u.ec.ecParams.DEREncoding,
                           &lpk->u.ec.ecParams) != SECSuccess) {
             dbg_trace("Failed to fill the EC params");
@@ -269,7 +265,7 @@ CK_RV import_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
     }
 
     // Unwrap.
-    CK_BYTE zero = 0;
+    CK_BYTE byte_zero = 0;
     if (!nss_db_attr_present && key_class == CKO_PRIVATE_KEY &&
         (key_type == CKK_DSA || key_type == CKK_EC)) {
         dbg_trace("Adding CKA_NSS_DB (a.k.a. CKA_NETSCAPE_DB) attribute");
@@ -279,8 +275,8 @@ CK_RV import_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
         }
         memcpy(modified_attrs, attributes, n_attributes * sizeof(CK_ATTRIBUTE));
         modified_attrs[n_attributes].type = CKA_NSS_DB;
-        modified_attrs[n_attributes].pValue = &zero;
-        modified_attrs[n_attributes].ulValueLen = sizeof(zero);
+        modified_attrs[n_attributes].pValue = &byte_zero;
+        modified_attrs[n_attributes].ulValueLen = sizeof(byte_zero);
         attributes = modified_attrs;
         n_attributes++;
     }
