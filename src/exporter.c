@@ -287,7 +287,7 @@ CK_RV export_key(key_data_t *key_data, CK_SESSION_HANDLE session,
     bool has_too_small_buffers = false;
     CK_ATTRIBUTE_PTR cached_attr_slot = NULL;
     for (size_t n = 0; n < n_attributes; n++) {
-        dbg_trace_attr("Attribute returned by NSS C_GetAttributeValue()",
+        dbg_trace_attr("Attribute returned by NSS' C_GetAttributeValue()",
                        attributes[n]);
         if (attributes[n].type == CKA_SENSITIVE &&
             attributes[n].pValue != NULL &&

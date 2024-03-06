@@ -84,8 +84,6 @@ static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
                 __attr_case(CKA_EXPONENT_1, lpk->u.rsa.exponent1);
                 __attr_case(CKA_EXPONENT_2, lpk->u.rsa.exponent2);
                 __attr_case(CKA_COEFFICIENT, lpk->u.rsa.coefficient);
-            default:
-                break;
             }
         }
         if (found_attrs < 8) {
@@ -113,8 +111,6 @@ static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
                 __attr_case(CKA_VALUE, lpk->u.dsa.privateValue);
             case CKA_NSS_DB:
                 *nss_db_attr_present = true;
-                break;
-            default:
                 break;
             }
         }
@@ -154,8 +150,6 @@ static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
             case CKA_NSS_DB:
                 *nss_db_attr_present = true;
                 __nth_attr_to_SECItem(CKA_NSS_DB, lpk->u.ec.publicValue);
-                break;
-            default:
                 break;
             }
         }
@@ -232,7 +226,7 @@ CK_RV import_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
 
     if (dbg_is_enabled()) {
         for (size_t n = 0; n < n_attributes; n++) {
-            dbg_trace_attr("Attribute received by our C_CreateObject()",
+            dbg_trace_attr("Attribute received by Adapter's C_CreateObject()",
                            attributes[n]);
         }
     }

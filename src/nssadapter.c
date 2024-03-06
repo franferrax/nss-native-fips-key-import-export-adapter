@@ -49,14 +49,14 @@ static inline bool get_key_type_from_attrs(CK_ATTRIBUTE_PTR attributes,
     for (size_t n = 0; n < n_attributes; n++) {
         if (attributes[n].pValue != NULL) {
             if (attributes[n].type == CKA_CLASS &&
-                attributes[n].ulValueLen == sizeof(CK_OBJECT_CLASS)) {
+                attributes[n].ulValueLen >= sizeof(CK_OBJECT_CLASS)) {
                 *key_class = *((CK_OBJECT_CLASS *)attributes[n].pValue);
                 has_key_class = true;
                 if (has_key_type) {
                     break;
                 }
             } else if (attributes[n].type == CKA_KEY_TYPE &&
-                       attributes[n].ulValueLen == sizeof(CK_KEY_TYPE)) {
+                       attributes[n].ulValueLen >= sizeof(CK_KEY_TYPE)) {
                 *key_type = *((CK_KEY_TYPE *)attributes[n].pValue);
                 has_key_type = true;
                 if (has_key_class) {
@@ -172,8 +172,10 @@ CK_RV C_CreateObject(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTemplate,
     if (get_key_type_from_attrs(pTemplate, ulCount, &keyClass, &keyType) &&
         is_importable_exportable(keyClass, keyType)) {
         // Intercept call.
-        return import_key(keyClass, keyType, hSession, pTemplate, ulCount,
-                          phObject);
+        CK_RV ret = import_key(keyClass, keyType, hSession, pTemplate, ulCount,
+                               phObject);
+        dbg_trace("Returning " CKR_FMT, ret);
+        return ret;
     }
     dbg_trace("There is no support for importing this key, forwarding to NSS"
               "\n  hSession = 0x%08lx, pTemplate = %p, ulCount = %lu, "
@@ -203,7 +205,10 @@ CK_RV C_GetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
         }
         if (keyData.extractable == CK_TRUE) {
             // Intercept call.
-            return export_key(&keyData, hSession, hObject, pTemplate, ulCount);
+            CK_RV ret =
+                export_key(&keyData, hSession, hObject, pTemplate, ulCount);
+            dbg_trace("Returning " CKR_FMT, ret);
+            return ret;
         } else {
             dbg_trace("Let non-extractable key be handled as opaque");
         }
