@@ -98,10 +98,18 @@ info: $(PREVIOUS_BUILD_MODE)
 	nm --dynamic --radix=x $(OUTPUT)
 	@echo
 
-.PHONY: test ## Run the test suite, usage: make test [JAVA=/path/to/java]
-test: $(PREVIOUS_BUILD_MODE)
+.PHONY: -test
+-test:
 	$(JAVA)c -d $(BIN_DIR) $(TST_DIR)/Main.java &&                             \
-	$(JAVA) -cp $(BIN_DIR) Main $(OUTPUT)
+	$(JAVA) -cp $(BIN_DIR) Main $(TEST_ARGUMENT)
+
+.PHONY: test ## Run the test suite, usage: make test [JAVA=/path/to/java]
+test: TEST_ARGUMENT = $(OUTPUT)
+test: $(PREVIOUS_BUILD_MODE) -test
+
+.PHONY: test-data ## Run the test suite in data generation mode (honours JAVA)
+test-data: TEST_ARGUMENT = --data-generation
+test-data: -test
 
 .PHONY: help ## Display this message
 help:

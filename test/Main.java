@@ -14,11 +14,13 @@ import java.security.AlgorithmParameters;
 import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
-import java.security.PrivateKey;
 import java.security.Security;
 import java.security.interfaces.DSAPrivateKey;
+import java.security.interfaces.DSAPublicKey;
 import java.security.interfaces.ECPrivateKey;
+import java.security.interfaces.ECPublicKey;
 import java.security.interfaces.RSAPrivateCrtKey;
+import java.security.interfaces.RSAPublicKey;
 import java.security.spec.DSAPrivateKeySpec;
 import java.security.spec.ECGenParameterSpec;
 import java.security.spec.ECParameterSpec;
@@ -36,8 +38,11 @@ public final class Main {
             String.join("", Collections.nCopies(160, "#"));
     private static final String CFG_NAME_SUFFIX = "NSS-Adapter-Test";
     private static final String FIPS_PROVIDER = "SunPKCS11-" + CFG_NAME_SUFFIX;
+    private static final int WRAP_ROWS = 80;
+    private static final String DATA_GENERATION_MODE_ARG = "--data-generation";
+    private static boolean dataGenerationMode = false;
 
-    private static void initialize(String nssAdapterLib) throws Exception {
+    private static void initializeFIPS(String nssAdapterLib) throws Exception {
         // Find the NSS adapter library
         FileSystem fs = FileSystems.getDefault();
         Path lib = fs.getPath(nssAdapterLib);
@@ -88,9 +93,13 @@ public final class Main {
 
     public static void main(String[] args) throws Exception {
         if (args.length != 1) {
-            throw new Exception("A *.so library program argument is required");
+            throw new Exception("A *.so library program argument is required " +
+                    "(or the " + DATA_GENERATION_MODE_ARG + " argument)");
         }
-        initialize(args[0]);
+        dataGenerationMode = DATA_GENERATION_MODE_ARG.equals(args[0]);
+        if (!dataGenerationMode) {
+            initializeFIPS(args[0]);
+        }
         for (Method method : Main.class.getDeclaredMethods()) {
             if (method.getName().startsWith(TESTS_METHODS_PREFIX)) {
                 printDescription(method);
@@ -99,6 +108,19 @@ public final class Main {
         }
         System.out.println(SEPARATOR);
         System.out.println("TEST PASS - OK");
+    }
+
+    private static <T> T getInstance(Class<T> serviceClass, String algorithm)
+            throws Exception {
+        if (dataGenerationMode) {
+            return (T) serviceClass.getDeclaredMethod("getInstance",
+                    String.class).invoke(null, algorithm);
+
+        } else {
+            return (T) serviceClass.getDeclaredMethod("getInstance",
+                            String.class, String.class)
+                    .invoke(null, algorithm, FIPS_PROVIDER);
+        }
     }
 
     private static void printDescription(Method method) {
@@ -127,43 +149,76 @@ public final class Main {
         }
     }
 
-    private static void ensureKeyIsFromSunPKCS11(Object key) throws Exception {
-        if (!key.getClass().toString().contains(".P11Key$")) {
-            throw new Exception("Unexpected key: " + key.getClass());
+    private static void checkKeyClass(Object key) throws Exception {
+        boolean isP11Key = key.getClass().toString().contains("P11Key");
+        if (dataGenerationMode && isP11Key) {
+            throw new Exception("When in data generation mode, the key should" +
+                    " NOT be a P11Key (key class: " + key.getClass() + ")");
+        }
+        if (!dataGenerationMode && !isP11Key) {
+            throw new Exception("The key should be a P11Key from the " +
+                    "SunPKCS11 provider (key class: " + key.getClass() + ")");
+        }
+    }
+
+    private static void logAsBI(String varName, BigInteger number) {
+        logWrapped("        BigInteger " + varName + " = new BigInteger(\"",
+                number);
+    }
+
+    private static void logWrapped(String head, BigInteger number) {
+        String digits = number.toString();
+        while (true) {
+            int length = WRAP_ROWS - head.length() - 3;
+            if (digits.length() > length) {
+                System.out.println(head + digits.substring(0, length) + "\" +");
+                head = "                \"";
+            } else {
+                System.out.println(head + digits + "\");");
+                break;
+            }
+            digits = digits.substring(length);
         }
     }
 
     private static void testSecretKeyImportAndExport() throws Exception {
+        // Symmetric 256 key (randomly generated in a non-FIPS machine with
+        // 'make test-data' from testSecretKeyGenerateAndExport)
         BigInteger rawKey = new BigInteger("331609782999261118064459749711703" +
                 "22140116389299700518577411521037425918595095");
 
-        SecretKeyFactory skf =
-                SecretKeyFactory.getInstance("AES", FIPS_PROVIDER);
-        SecretKey key = skf.translateKey(
-                new SecretKeySpec(rawKey.toByteArray(), "AES"));
+        SecretKey key = new SecretKeySpec(rawKey.toByteArray(), "AES");
+        if (!dataGenerationMode) {
+            // SunPKCS11 is the only provider that has an AES SecretKeyFactory.
+            SecretKeyFactory skf = getInstance(SecretKeyFactory.class, "AES");
+            key = skf.translateKey(key);
+        }
 
-        ensureKeyIsFromSunPKCS11(key);
+        checkKeyClass(key);
         byte[] exported = key.getEncoded();
-        Objects.requireNonNull(exported, "Could not export secret key");
+        Objects.requireNonNull(exported, "Export failed");
         assertEquals(rawKey, new BigInteger(exported), "key bytes");
     }
 
     private static void testSecretKeyGenerateAndExport() throws Exception {
         int keyBytes = 32;
 
-        KeyGenerator kg = KeyGenerator.getInstance("AES", FIPS_PROVIDER);
+        KeyGenerator kg = getInstance(KeyGenerator.class, "AES");
         kg.init(keyBytes << 3);
         SecretKey key = kg.generateKey();
 
-        ensureKeyIsFromSunPKCS11(key);
+        checkKeyClass(key);
         byte[] exported = key.getEncoded();
-        Objects.requireNonNull(exported, "Could not export secret key");
+        Objects.requireNonNull(exported, "Export failed");
         assertEquals(keyBytes, exported.length, "key length");
+        if (dataGenerationMode) {
+            logAsBI("rawKey", new BigInteger(exported));
+        }
     }
 
     private static void testRSAPrivateKeyImportAndExport() throws Exception {
-        // RSA 4096 key (randomly generated by dumping
-        // testRSAPrivateKeyGenerateAndExport results)
+        // RSA 4096 key pair (randomly generated in a non-FIPS machine with
+        // 'make test-data' from testRSAPrivateKeyGenerateAndExport)
         BigInteger modulus = new BigInteger("84737273339079744212016956420604" +
                 "672536560539844521012747087624164213633972673792142257314988" +
                 "038212488382133403829735253956331337879327787540424241875447" +
@@ -265,44 +320,54 @@ public final class Main {
                 "034274565916208513555718393838069574194332902700471898985854" +
                 "7682512137336306770008811024491441058352227056724");
 
-        KeyFactory kf = KeyFactory.getInstance("RSA", FIPS_PROVIDER);
-        PrivateKey pk = kf.generatePrivate(
+        KeyFactory kf = getInstance(KeyFactory.class, "RSA");
+        RSAPrivateCrtKey privK = (RSAPrivateCrtKey) kf.generatePrivate(
                 new RSAPrivateCrtKeySpec(modulus, publicExponent,
                         privateExponent, prime1, prime2, primeExponent1,
                         primeExponent2, coefficient));
 
-        ensureKeyIsFromSunPKCS11(pk);
-        Objects.requireNonNull(pk.getEncoded(), "Could not export private key");
-        RSAPrivateCrtKey rsaPk = (RSAPrivateCrtKey) pk;
-        assertEquals(modulus, rsaPk.getModulus(), "modulus");
-        assertEquals(publicExponent, rsaPk.getPublicExponent(),
+        checkKeyClass(privK);
+        Objects.requireNonNull(privK.getEncoded(), "Export failed");
+        assertEquals(modulus, privK.getModulus(), "modulus");
+        assertEquals(publicExponent, privK.getPublicExponent(),
                 "publicExponent");
-        assertEquals(privateExponent, rsaPk.getPrivateExponent(),
+        assertEquals(privateExponent, privK.getPrivateExponent(),
                 "privateExponent");
-        assertEquals(prime1, rsaPk.getPrimeP(), "prime1 (primeP)");
-        assertEquals(prime2, rsaPk.getPrimeQ(), "prime2 (primeQ)");
-        assertEquals(primeExponent1, rsaPk.getPrimeExponentP(),
+        assertEquals(prime1, privK.getPrimeP(), "prime1 (primeP)");
+        assertEquals(prime2, privK.getPrimeQ(), "prime2 (primeQ)");
+        assertEquals(primeExponent1, privK.getPrimeExponentP(),
                 "primeExponent1 (primeExponentP)");
-        assertEquals(primeExponent2, rsaPk.getPrimeExponentQ(),
+        assertEquals(primeExponent2, privK.getPrimeExponentQ(),
                 "primeExponent2 (primeExponentQ)");
-        assertEquals(coefficient, rsaPk.getCrtCoefficient(), "coefficient");
+        assertEquals(coefficient, privK.getCrtCoefficient(), "coefficient");
     }
 
     private static void testRSAPrivateKeyGenerateAndExport() throws Exception {
-        KeyPairGenerator kpg =
-                KeyPairGenerator.getInstance("RSA", FIPS_PROVIDER);
+        KeyPairGenerator kpg = getInstance(KeyPairGenerator.class, "RSA");
         kpg.initialize(4096);
         KeyPair kp = kpg.generateKeyPair();
 
-        ensureKeyIsFromSunPKCS11(kp.getPublic());
-        ensureKeyIsFromSunPKCS11(kp.getPrivate());
-        Objects.requireNonNull(kp.getPrivate().getEncoded(),
-                "Could not export private key");
+        RSAPublicKey pubK = (RSAPublicKey) kp.getPublic();
+        RSAPrivateCrtKey privK = (RSAPrivateCrtKey) kp.getPrivate();
+        checkKeyClass(pubK);
+        checkKeyClass(privK);
+        Objects.requireNonNull(privK.getEncoded(), "Export failed");
+
+        if (dataGenerationMode) {
+            logAsBI("modulus", privK.getModulus());
+            logAsBI("publicExponent", privK.getPublicExponent());
+            logAsBI("privateExponent", privK.getPrivateExponent());
+            logAsBI("prime1", privK.getPrimeP());
+            logAsBI("prime2", privK.getPrimeQ());
+            logAsBI("primeExponent1", privK.getPrimeExponentP());
+            logAsBI("primeExponent2", privK.getPrimeExponentQ());
+            logAsBI("coefficient", privK.getCrtCoefficient());
+        }
     }
 
     private static void testDSAPrivateKeyImportAndExport() throws Exception {
-        // DSA 2048 key (randomly generated by dumping
-        // testDSAPrivateKeyGenerateAndExport results)
+        // DSA 2048 key pair (randomly generated in a non-FIPS machine with
+        // 'make test-data' from testDSAPrivateKeyGenerateAndExport)
         BigInteger privateValue = new BigInteger("776540688481433729664822401" +
                 "5895780505054731336937960513928511924730");
         BigInteger prime = new BigInteger("1811184866314200557117877062488121" +
@@ -330,75 +395,82 @@ public final class Main {
                 "730274929360377893370118757107592084984869086112619540269645" +
                 "74111219599568903257472567764789616958430");
 
-        KeyFactory kf = KeyFactory.getInstance("DSA", FIPS_PROVIDER);
-        PrivateKey pk = kf.generatePrivate(
+        KeyFactory kf = getInstance(KeyFactory.class, "DSA");
+        DSAPrivateKey privK = (DSAPrivateKey) kf.generatePrivate(
                 new DSAPrivateKeySpec(privateValue, prime, subPrime, base));
 
-        ensureKeyIsFromSunPKCS11(pk);
-        Objects.requireNonNull(pk.getEncoded(), "Could not export private key");
-        DSAPrivateKey dsaPk = (DSAPrivateKey) pk;
-        assertEquals(privateValue, dsaPk.getX(), "privateValue (X)");
-        assertEquals(prime, dsaPk.getParams().getP(), "prime (P)");
-        assertEquals(subPrime, dsaPk.getParams().getQ(), "subPrime (Q)");
-        assertEquals(base, dsaPk.getParams().getG(), "base (G)");
+        checkKeyClass(privK);
+        Objects.requireNonNull(privK.getEncoded(), "Export failed");
+        assertEquals(privateValue, privK.getX(), "privateValue (X)");
+        assertEquals(prime, privK.getParams().getP(), "prime (P)");
+        assertEquals(subPrime, privK.getParams().getQ(), "subPrime (Q)");
+        assertEquals(base, privK.getParams().getG(), "base (G)");
     }
 
     private static void testDSAPrivateKeyGenerateAndExport() throws Exception {
-        KeyPairGenerator kpg =
-                KeyPairGenerator.getInstance("DSA", FIPS_PROVIDER);
+        KeyPairGenerator kpg = getInstance(KeyPairGenerator.class, "DSA");
         kpg.initialize(2048);
         KeyPair kp = kpg.generateKeyPair();
 
-        ensureKeyIsFromSunPKCS11(kp.getPublic());
-        ensureKeyIsFromSunPKCS11(kp.getPrivate());
-        Objects.requireNonNull(kp.getPrivate().getEncoded(),
-                "Could not export private key");
+        DSAPublicKey pubK = (DSAPublicKey) kp.getPublic();
+        DSAPrivateKey privK = (DSAPrivateKey) kp.getPrivate();
+        checkKeyClass(pubK);
+        checkKeyClass(privK);
+        Objects.requireNonNull(privK.getEncoded(), "Export failed");
+
+        if (dataGenerationMode) {
+            logAsBI("privateValue", privK.getX());
+            logAsBI("prime", privK.getParams().getP());
+            logAsBI("subPrime", privK.getParams().getQ());
+            logAsBI("base", privK.getParams().getG());
+        }
     }
 
     private static void testECPrivateKeyImportAndExport() throws Exception {
-        // EC secp256r1 key (randomly generated by dumping
-        // testECPrivateKeyGenerateAndExport results after
-        // replacing secp521r1 with secp256r1)
-        AlgorithmParameters p =
-                AlgorithmParameters.getInstance("EC", FIPS_PROVIDER);
+        // EC secp256r1 key pair (randomly generated in a non-FIPS machine with
+        // 'make test-data' from testECPrivateKeyGenerateAndExport)
+        AlgorithmParameters p = getInstance(AlgorithmParameters.class, "EC");
         p.init(new ECGenParameterSpec("secp256r1"));
         ECParameterSpec params = p.getParameterSpec(ECParameterSpec.class);
         BigInteger privateValue = new BigInteger("655241821151813438841419350" +
                 "61567659017866166973286609487826995518670289344152");
 
-        KeyFactory kf = KeyFactory.getInstance("EC", FIPS_PROVIDER);
-        PrivateKey pk =
-                kf.generatePrivate(new ECPrivateKeySpec(privateValue, params));
+        KeyFactory kf = getInstance(KeyFactory.class, "EC");
+        ECPrivateKey privK = (ECPrivateKey) kf.generatePrivate(
+                new ECPrivateKeySpec(privateValue, params));
 
-        ensureKeyIsFromSunPKCS11(pk);
-        Objects.requireNonNull(pk.getEncoded(), "Could not export private key");
-        ECPrivateKey ecPk = (ECPrivateKey) pk;
-        assertEquals(privateValue, ecPk.getS(), "privateValue (S)");
+        checkKeyClass(privK);
+        Objects.requireNonNull(privK.getEncoded(), "Export failed");
+        assertEquals(privateValue, privK.getS(), "privateValue (S)");
         assertEquals(params.getCurve().getField(),
-                ecPk.getParams().getCurve().getField(), "curve field");
+                privK.getParams().getCurve().getField(), "curve field");
         assertEquals(params.getCurve().getA(),
-                ecPk.getParams().getCurve().getA(), "curve A");
+                privK.getParams().getCurve().getA(), "curve A");
         assertEquals(params.getCurve().getB(),
-                ecPk.getParams().getCurve().getB(), "curve B");
+                privK.getParams().getCurve().getB(), "curve B");
         assertEquals(params.getGenerator().getAffineX(),
-                ecPk.getParams().getGenerator().getAffineX(), "generator X");
+                privK.getParams().getGenerator().getAffineX(), "generator X");
         assertEquals(params.getGenerator().getAffineY(),
-                ecPk.getParams().getGenerator().getAffineY(), "generator Y");
-        assertEquals(params.getOrder(), ecPk.getParams().getOrder(), "order");
-        assertEquals(params.getCofactor(), ecPk.getParams().getCofactor(),
+                privK.getParams().getGenerator().getAffineY(), "generator Y");
+        assertEquals(params.getOrder(), privK.getParams().getOrder(), "order");
+        assertEquals(params.getCofactor(), privK.getParams().getCofactor(),
                 "cofactor");
     }
 
     private static void testECPrivateKeyGenerateAndExport() throws Exception {
-        KeyPairGenerator kpg =
-                KeyPairGenerator.getInstance("EC", FIPS_PROVIDER);
-        kpg.initialize(new ECGenParameterSpec("secp521r1"));
+        KeyPairGenerator kpg = getInstance(KeyPairGenerator.class, "EC");
+        kpg.initialize(new ECGenParameterSpec(
+                dataGenerationMode ? "secp256r1" : "secp521r1"));
         KeyPair kp = kpg.generateKeyPair();
 
-        ensureKeyIsFromSunPKCS11(kp.getPublic());
-        ensureKeyIsFromSunPKCS11(kp.getPrivate());
-        Objects.requireNonNull(kp.getPrivate().getEncoded(),
-                "Could not export private key");
-    }
+        ECPublicKey pubK = (ECPublicKey) kp.getPublic();
+        ECPrivateKey privK = (ECPrivateKey) kp.getPrivate();
+        checkKeyClass(pubK);
+        checkKeyClass(privK);
+        Objects.requireNonNull(privK.getEncoded(), "Export failed");
 
+        if (dataGenerationMode) {
+            logAsBI("privateValue", privK.getS());
+        }
+    }
 }
