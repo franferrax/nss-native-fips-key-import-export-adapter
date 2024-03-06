@@ -14,7 +14,10 @@ import java.security.AlgorithmParameters;
 import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.security.Security;
+import java.security.Signature;
 import java.security.interfaces.DSAPrivateKey;
 import java.security.interfaces.DSAPublicKey;
 import java.security.interfaces.ECPrivateKey;
@@ -22,10 +25,14 @@ import java.security.interfaces.ECPublicKey;
 import java.security.interfaces.RSAPrivateCrtKey;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.DSAPrivateKeySpec;
+import java.security.spec.DSAPublicKeySpec;
 import java.security.spec.ECGenParameterSpec;
 import java.security.spec.ECParameterSpec;
+import java.security.spec.ECPoint;
 import java.security.spec.ECPrivateKeySpec;
+import java.security.spec.ECPublicKeySpec;
 import java.security.spec.RSAPrivateCrtKeySpec;
+import java.security.spec.RSAPublicKeySpec;
 import java.util.Collections;
 import java.util.Objects;
 import java.util.regex.Pattern;
@@ -40,6 +47,11 @@ public final class Main {
     private static final String FIPS_PROVIDER = "SunPKCS11-" + CFG_NAME_SUFFIX;
     private static final int WRAP_ROWS = 80;
     private static final String DATA_GENERATION_MODE_ARG = "--data-generation";
+    // Randomly generated in a jshell shell with:
+    // new BigInteger(new FileInputStream("/dev/random").readNBytes(32))
+    private static final byte[] SIGN_MESSAGE = new BigInteger("-23082" +
+            "34156588244362370631618004123835496994044129494255449193" +
+            "5720154682342904").toByteArray();
     private static boolean dataGenerationMode = false;
 
     private static void initializeFIPS(String nssAdapterLib) throws Exception {
@@ -78,12 +90,19 @@ public final class Main {
         // Set our custom provider list with SunPKCS11 as the first one
         int n = 1;
         String SunPKCS11 = "SunPKCS11";
+        String SUN = "SUN";
+        String SunRsaSign = "SunRsaSign";
         String SunEC = "SunEC";
         if (System.getProperty("java.version").startsWith("1.")) {
-            SunPKCS11 = "sun.security.pkcs11." + SunPKCS11;
-            SunEC = "sun.security.ec." + SunEC;
+            // Java 8
+            SunPKCS11 = "sun.security.pkcs11.SunPKCS11";
+            SUN = "sun.security.provider.Sun";
+            SunRsaSign = "sun.security.rsa.SunRsaSign";
+            SunEC = "sun.security.ec.SunEC";
         }
         Security.setProperty("security.provider." + n++, SunPKCS11 + " " + cfg);
+        Security.setProperty("security.provider." + n++, SUN);
+        Security.setProperty("security.provider." + n++, SunRsaSign);
         Security.setProperty("security.provider." + n++, SunEC);
         // Clear any other provider from the list
         while (Security.getProperty("security.provider." + n) != null) {
@@ -158,6 +177,38 @@ public final class Main {
         if (!dataGenerationMode && !isP11Key) {
             throw new Exception("The key should be a P11Key from the " +
                     "SunPKCS11 provider (key class: " + key.getClass() + ")");
+        }
+    }
+
+    private static byte[] doSign(String algorithm, PrivateKey privK)
+            throws Exception {
+        Signature sig = getInstance(Signature.class, algorithm);
+        sig.initSign(privK);
+        sig.update(SIGN_MESSAGE);
+        return sig.sign();
+    }
+
+    private static void checkSign(String algorithm, String crossCheckProvider,
+            PrivateKey privK, PublicKey pubK, String expectedSignature)
+            throws Exception {
+        // Execute two sign operations in a row to exercise
+        // PKCS11::getNativeKeyInfo and PKCS11::createNativeKey
+        // code (JDK-6913047).
+        byte[] performedSignature = doSign(algorithm, privK);
+        performedSignature = doSign(algorithm, privK);
+
+        if (expectedSignature != null) {
+            assertEquals(new BigInteger(expectedSignature),
+                    new BigInteger(performedSignature),
+                    algorithm + " signature");
+        }
+
+        // Cross-check by verifying the signature with a non-FIPS provider
+        Signature sig = Signature.getInstance(algorithm, crossCheckProvider);
+        sig.initVerify(pubK);
+        sig.update(SIGN_MESSAGE);
+        if (!sig.verify(performedSignature)) {
+            throw new Exception("Signature cross-provider check failed");
         }
     }
 
@@ -340,6 +391,32 @@ public final class Main {
         assertEquals(primeExponent2, privK.getPrimeExponentQ(),
                 "primeExponent2 (primeExponentQ)");
         assertEquals(coefficient, privK.getCrtCoefficient(), "coefficient");
+
+        RSAPublicKey pubK = (RSAPublicKey) kf.generatePublic(
+                new RSAPublicKeySpec(modulus, publicExponent));
+        checkKeyClass(pubK);
+        checkSign("SHA256withRSA", "SunRsaSign", privK, pubK, "13100612147691" +
+                "361616255443599473514703614872129979110920102290048479424018" +
+                "944699781634928025680405253556943110292641321523865661503257" +
+                "636662041789231021290974185655111538233322461447235500916863" +
+                "974988236482445620122453822987792817201109882776607599523186" +
+                "768855757582697221018886695162581123327101222866164516206459" +
+                "836227479708754368497622945856906640266562328284171218886177" +
+                "301053219800162718729214038277400782922506824352164793357950" +
+                "266611733987405546752217204212329582408293299532111158120503" +
+                "339397693937026450151992303512850849220386623951898542005960" +
+                "566047533856493548484327918509798581466991730122714145955025" +
+                "111614686754442377879623660609207548212461615153558671919950" +
+                "631194729903339255030169816470182262187027400680632727295274" +
+                "753590787300757201454860022590768995583690838330742088982372" +
+                "017041528444082764728619007880525890775480325982913483495896" +
+                "580177339015052879074126101356809070857566361952160854649531" +
+                "407481370131665912392746050361711926270054057701893151444394" +
+                "430182328779006678315946783946967895438723120911542853475733" +
+                "779379745181164945199389100367251612131834773250034904037189" +
+                "267223705429860689225117820455734315866183846419999269033569" +
+                "721361995692194933660755703076452572982487715397393702734424" +
+                "6516276343010274809");
     }
 
     private static void testRSAPrivateKeyGenerateAndExport() throws Exception {
@@ -362,14 +439,31 @@ public final class Main {
             logAsBI("primeExponent1", privK.getPrimeExponentP());
             logAsBI("primeExponent2", privK.getPrimeExponentQ());
             logAsBI("coefficient", privK.getCrtCoefficient());
+
+            System.out.println(System.lineSeparator());
+            String signAlg = "SHA256withRSA";
+            logWrapped("        checkSign(\"" + signAlg +
+                            "\", \"SunRsaSign\", privK, pubK, \"",
+                    new BigInteger(doSign(signAlg, privK)));
         }
     }
 
     private static void testDSAPrivateKeyImportAndExport() throws Exception {
         // DSA 2048 key pair (randomly generated in a non-FIPS machine with
         // 'make test-data' from testDSAPrivateKeyGenerateAndExport)
-        BigInteger privateValue = new BigInteger("776540688481433729664822401" +
-                "5895780505054731336937960513928511924730");
+        BigInteger publicValue = new BigInteger("1126812005479594661375002034" +
+                "268064847519522208147488834086713944995367237198794065138968" +
+                "511465966770087068309991501079914805391039616581474754484143" +
+                "360852534877897634605687175052924171702228489799972085103301" +
+                "505965134957738596104639890821825336476821851074001297948721" +
+                "348394787101108614859981388536595821896954277512146345546286" +
+                "414518891206371222895143046933555273389238401379599339146150" +
+                "620028711730760050824005838781999795719026762291446143343168" +
+                "959272765316076453698957127663230858468473640321568422026337" +
+                "159624890786092108500697178903759395337486879771124461770995" +
+                "6590643874906600083757792163883066912165854207862");
+        BigInteger privateValue = new BigInteger("129100743408020365338180806" +
+                "34324509635453260048686193416862200286397");
         BigInteger prime = new BigInteger("1811184866314200557117877062488121" +
                 "469659133925682350702354460589141170708161715231951918020125" +
                 "044061516370042605439640379530343556410191905345983289013949" +
@@ -405,6 +499,11 @@ public final class Main {
         assertEquals(prime, privK.getParams().getP(), "prime (P)");
         assertEquals(subPrime, privK.getParams().getQ(), "subPrime (Q)");
         assertEquals(base, privK.getParams().getG(), "base (G)");
+
+        DSAPublicKey pubK = (DSAPublicKey) kf.generatePublic(
+                new DSAPublicKeySpec(publicValue, prime, subPrime, base));
+        checkKeyClass(pubK);
+        checkSign("SHA256withDSA", "SUN", privK, pubK, null);
     }
 
     private static void testDSAPrivateKeyGenerateAndExport() throws Exception {
@@ -419,6 +518,7 @@ public final class Main {
         Objects.requireNonNull(privK.getEncoded(), "Export failed");
 
         if (dataGenerationMode) {
+            logAsBI("publicValue", pubK.getY());
             logAsBI("privateValue", privK.getX());
             logAsBI("prime", privK.getParams().getP());
             logAsBI("subPrime", privK.getParams().getQ());
@@ -432,8 +532,13 @@ public final class Main {
         AlgorithmParameters p = getInstance(AlgorithmParameters.class, "EC");
         p.init(new ECGenParameterSpec("secp256r1"));
         ECParameterSpec params = p.getParameterSpec(ECParameterSpec.class);
-        BigInteger privateValue = new BigInteger("655241821151813438841419350" +
-                "61567659017866166973286609487826995518670289344152");
+        BigInteger publicX = new BigInteger("93062551683536377350716644831279" +
+                "570345944186988487518330597599802522368092364");
+        BigInteger publicY = new BigInteger("69914441280610907160365037474212" +
+                "863551346530835322446220875816596067599130846");
+        ECPoint publicPoint = new ECPoint(publicX, publicY);
+        BigInteger privateValue = new BigInteger("394304154275358840373799541" +
+                "50072853733096533150596936863525916096810784089027");
 
         KeyFactory kf = getInstance(KeyFactory.class, "EC");
         ECPrivateKey privK = (ECPrivateKey) kf.generatePrivate(
@@ -455,6 +560,11 @@ public final class Main {
         assertEquals(params.getOrder(), privK.getParams().getOrder(), "order");
         assertEquals(params.getCofactor(), privK.getParams().getCofactor(),
                 "cofactor");
+
+        ECPublicKey pubK = (ECPublicKey) kf.generatePublic(
+                new ECPublicKeySpec(publicPoint, params));
+        checkKeyClass(pubK);
+        checkSign("SHA256withECDSA", "SunEC", privK, pubK, null);
     }
 
     private static void testECPrivateKeyGenerateAndExport() throws Exception {
@@ -470,6 +580,10 @@ public final class Main {
         Objects.requireNonNull(privK.getEncoded(), "Export failed");
 
         if (dataGenerationMode) {
+            logAsBI("publicX", pubK.getW().getAffineX());
+            logAsBI("publicY", pubK.getW().getAffineY());
+            System.out.println("        ECPoint publicPoint = " +
+                    "new ECPoint(publicX, publicY);");
             logAsBI("privateValue", privK.getS());
         }
     }

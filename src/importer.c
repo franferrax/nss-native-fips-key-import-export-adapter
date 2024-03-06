@@ -10,6 +10,8 @@
 #include <secder.h>
 #include <secoid.h>
 
+#define INVALID_IDX ((CK_ULONG)-1L)
+
 #define __nth_attr_to_SECItem(attr_type, sec_item)                             \
     do {                                                                       \
         if (attributes[n].pValue == NULL) {                                    \
@@ -44,12 +46,22 @@
         __nth_attr_to_SECItem(attr_type, (sec_item));                          \
         break
 
+#define __attr_case_store_sensitive_attr_idx_if_false                          \
+    case CKA_SENSITIVE:                                                        \
+        if (attributes[n].pValue != NULL &&                                    \
+            attributes[n].ulValueLen >= sizeof(CK_BBOOL) &&                    \
+            *((CK_BBOOL *)attributes[n].pValue) == CK_FALSE) {                 \
+            *sensitive_attr_idx = n;                                           \
+        }                                                                      \
+        break
+
 static CK_RV encode_secret_key(CK_ATTRIBUTE_PTR attributes,
-                               CK_ULONG n_attributes,
-                               SECItem *encoded_key_item) {
+                               CK_ULONG n_attributes, SECItem *encoded_key_item,
+                               CK_ULONG *sensitive_attr_idx) {
     __for_each_attr_switch_by_its_type_and_validate_template(
         {
             __attr_case(CKA_VALUE, *encoded_key_item);
+            __attr_case_store_sensitive_attr_idx_if_false;
         },
         1, "Unavailable attribute: CKA_VALUE");
     return CKR_OK;
@@ -58,7 +70,8 @@ static CK_RV encode_secret_key(CK_ATTRIBUTE_PTR attributes,
 static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
                                 CK_ULONG n_attributes, CK_KEY_TYPE key_type,
                                 PLArenaPool *arena, SECItem *encoded_key_item,
-                                bool *nss_db_attr_present) {
+                                bool *nss_db_attr_present,
+                                CK_ULONG *sensitive_attr_idx) {
     SECItem *alg_params = NULL;
     SECOidTag alg_tag = SEC_OID_UNKNOWN;
     NSSLOWKEYPrivateKeyInfo *pki;
@@ -94,6 +107,7 @@ static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
                 __attr_case(CKA_EXPONENT_1, lpk->u.rsa.exponent1);
                 __attr_case(CKA_EXPONENT_2, lpk->u.rsa.exponent2);
                 __attr_case(CKA_COEFFICIENT, lpk->u.rsa.coefficient);
+                __attr_case_store_sensitive_attr_idx_if_false;
             },
             8, "Too few attributes for an RSA private key");
         prepare_low_rsa_priv_key_for_asn1(lpk);
@@ -114,6 +128,7 @@ static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
                 __attr_case(CKA_SUBPRIME, lpk->u.dsa.params.subPrime);
                 __attr_case(CKA_BASE, lpk->u.dsa.params.base);
                 __attr_case(CKA_VALUE, lpk->u.dsa.privateValue);
+                __attr_case_store_sensitive_attr_idx_if_false;
             case CKA_NSS_DB:
                 *nss_db_attr_present = true;
                 break;
@@ -147,6 +162,7 @@ static CK_RV encode_private_key(CK_ATTRIBUTE_PTR attributes,
             {
                 __attr_case(CKA_EC_PARAMS, lpk->u.ec.ecParams.DEREncoding);
                 __attr_case(CKA_VALUE, lpk->u.ec.privateValue);
+                __attr_case_store_sensitive_attr_idx_if_false;
             case CKA_NSS_DB:
                 *nss_db_attr_present = true;
                 __nth_attr_to_SECItem(CKA_NSS_DB, lpk->u.ec.publicValue);
@@ -215,6 +231,7 @@ CK_RV import_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
     CK_RV ret = CKR_OK;
     CK_ATTRIBUTE_PTR modified_attrs = NULL;
     bool nss_db_attr_present = false;
+    CK_ULONG sensitive_attr_idx = INVALID_IDX;
     PLArenaPool *arena = NULL;
     SECItem encoded_key_item = {0};
     CK_BYTE_PTR encrypted_key = NULL;
@@ -229,14 +246,16 @@ CK_RV import_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
 
     // Encode.
     if (key_class == CKO_SECRET_KEY) {
-        ret = encode_secret_key(attributes, n_attributes, &encoded_key_item);
+        ret = encode_secret_key(attributes, n_attributes, &encoded_key_item,
+                                &sensitive_attr_idx);
     } else if (key_class == CKO_PRIVATE_KEY) {
         arena = PORT_NewArena(2048);
         if (arena == NULL) {
             return_with_cleanup(CKR_HOST_MEMORY);
         }
         ret = encode_private_key(attributes, n_attributes, key_type, arena,
-                                 &encoded_key_item, &nss_db_attr_present);
+                                 &encoded_key_item, &nss_db_attr_present,
+                                 &sensitive_attr_idx);
     } else {
         dbg_trace("This should never happen, given is_importable_exportable() "
                   "was previously called\n  key_class = " CKO_FMT,
@@ -266,19 +285,30 @@ CK_RV import_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
 
     // Unwrap.
     CK_BYTE byte_zero = 0;
-    if (!nss_db_attr_present && key_class == CKO_PRIVATE_KEY &&
-        (key_type == CKK_DSA || key_type == CKK_EC)) {
-        dbg_trace("Adding CKA_NSS_DB (a.k.a. CKA_NETSCAPE_DB) attribute");
-        modified_attrs = malloc((n_attributes + 1) * sizeof(CK_ATTRIBUTE));
+    CK_BBOOL bool_true = CK_TRUE;
+    if (sensitive_attr_idx != INVALID_IDX ||
+        (!nss_db_attr_present && key_class == CKO_PRIVATE_KEY &&
+         (key_type == CKK_DSA || key_type == CKK_EC))) {
+        modified_attrs = malloc((n_attributes + (nss_db_attr_present ? 0 : 1)) *
+                                sizeof(CK_ATTRIBUTE));
         if (modified_attrs == NULL) {
             return_with_cleanup(CKR_HOST_MEMORY);
         }
         memcpy(modified_attrs, attributes, n_attributes * sizeof(CK_ATTRIBUTE));
-        modified_attrs[n_attributes].type = CKA_NSS_DB;
-        modified_attrs[n_attributes].pValue = &byte_zero;
-        modified_attrs[n_attributes].ulValueLen = sizeof(byte_zero);
+        if (sensitive_attr_idx != INVALID_IDX) {
+            dbg_trace("Forcing CKA_SENSITIVE=CK_TURE to avoid being rejected "
+                      "by the NSS FIPS token");
+            modified_attrs[sensitive_attr_idx].pValue = &bool_true;
+            modified_attrs[sensitive_attr_idx].ulValueLen = sizeof(bool_true);
+        }
+        if (!nss_db_attr_present) {
+            dbg_trace("Adding CKA_NSS_DB (a.k.a. CKA_NETSCAPE_DB) attribute");
+            modified_attrs[n_attributes].type = CKA_NSS_DB;
+            modified_attrs[n_attributes].pValue = &byte_zero;
+            modified_attrs[n_attributes].ulValueLen = sizeof(byte_zero);
+            n_attributes++;
+        }
         attributes = modified_attrs;
-        n_attributes++;
     }
     ret = P11.C_UnwrapKey(session, &IEK.mech, IEK.id, encrypted_key,
                           encrypted_key_len, attributes, n_attributes, key_id);
