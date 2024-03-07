@@ -289,6 +289,8 @@ public final class Main {
         byte[] exported = key.getEncoded();
         Objects.requireNonNull(exported, "Export failed");
         assertEquals(keyBytes, exported.length, "key length");
+        checkCipher("AES/CBC/PKCS5Padding", "SunJCE", key, null);
+
         if (dataGenerationMode) {
             logAsBI("rawKey", new BigInteger(exported));
 
@@ -462,6 +464,7 @@ public final class Main {
         checkKeyClass(pubK);
         checkKeyClass(privK);
         Objects.requireNonNull(privK.getEncoded(), "Export failed");
+        checkSign("SHA256withRSA", "SunRsaSign", privK, pubK, null);
 
         if (dataGenerationMode) {
             logAsBI("modulus", privK.getModulus());
@@ -482,7 +485,8 @@ public final class Main {
     }
 
     private static void testDSAPrivateKeyImportAndExport() throws Exception {
-        // DSA 2048 key pair (randomly generated in a non-FIPS machine with
+        // DSA 1024 key pair (randomly generated in a non-FIPS machine with
+        // 'make test-data' from testDSAPrivateKeyGenerateAndExport)
         BigInteger publicValue = new BigInteger("1495744577618661430190874954" +
                 "934393034736152170302901636921673268470680617615407955608256" +
                 "761322154063238150781245162523249568226692166493988126351162" +
@@ -533,6 +537,7 @@ public final class Main {
         checkKeyClass(pubK);
         checkKeyClass(privK);
         Objects.requireNonNull(privK.getEncoded(), "Export failed");
+        checkSign("SHA1withDSA", "SUN", privK, pubK, null);
 
         if (dataGenerationMode) {
             logAsBI("publicValue", pubK.getY());
@@ -586,8 +591,7 @@ public final class Main {
 
     private static void testECPrivateKeyGenerateAndExport() throws Exception {
         KeyPairGenerator kpg = getInstance(KeyPairGenerator.class, "EC");
-        kpg.initialize(new ECGenParameterSpec(
-                dataGenerationMode ? "secp256r1" : "secp521r1"));
+        kpg.initialize(new ECGenParameterSpec("secp256r1"));
         KeyPair kp = kpg.generateKeyPair();
 
         ECPublicKey pubK = (ECPublicKey) kp.getPublic();
@@ -595,6 +599,7 @@ public final class Main {
         checkKeyClass(pubK);
         checkKeyClass(privK);
         Objects.requireNonNull(privK.getEncoded(), "Export failed");
+        checkSign("SHA256withECDSA", "SunEC", privK, pubK, null);
 
         if (dataGenerationMode) {
             logAsBI("publicX", pubK.getW().getAffineX());
