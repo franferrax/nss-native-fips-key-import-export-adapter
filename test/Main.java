@@ -87,26 +87,16 @@ public final class Main {
                 + lf + "attributes(*,CKO_SECRET_KEY,CKK_GENERIC_SECRET)=" +
                 "{ CKA_SIGN=true }";
 
-        // Set our custom provider list with SunPKCS11 as the first one
+        // Insert our customized SunPKCS11 provider as the first one
+        String SunPKCS11 = System.getProperty("java.version").startsWith("1.") ?
+                "sun.security.pkcs11.SunPKCS11" : // <-- Java 8
+                "SunPKCS11";
         int n = 1;
-        String SunPKCS11 = "SunPKCS11";
-        String SUN = "SUN";
-        String SunRsaSign = "SunRsaSign";
-        String SunEC = "SunEC";
-        if (System.getProperty("java.version").startsWith("1.")) {
-            // Java 8
-            SunPKCS11 = "sun.security.pkcs11.SunPKCS11";
-            SUN = "sun.security.provider.Sun";
-            SunRsaSign = "sun.security.rsa.SunRsaSign";
-            SunEC = "sun.security.ec.SunEC";
-        }
-        Security.setProperty("security.provider." + n++, SunPKCS11 + " " + cfg);
-        Security.setProperty("security.provider." + n++, SUN);
-        Security.setProperty("security.provider." + n++, SunRsaSign);
-        Security.setProperty("security.provider." + n++, SunEC);
-        // Clear any other provider from the list
-        while (Security.getProperty("security.provider." + n) != null) {
-            Security.setProperty("security.provider." + n++, "");
+        String previous = SunPKCS11 + " " + cfg;
+        while (previous != null) {
+            String current = Security.getProperty("security.provider." + n);
+            Security.setProperty("security.provider." + n++, previous);
+            previous = current;
         }
     }
 
