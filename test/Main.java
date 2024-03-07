@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later WITH Classpath-exception-2.0
 
+import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.lang.reflect.Method;
 import java.math.BigInteger;
@@ -49,9 +51,12 @@ public final class Main {
     private static final String DATA_GENERATION_MODE_ARG = "--data-generation";
     // Randomly generated in a jshell shell with:
     // new BigInteger(new FileInputStream("/dev/random").readNBytes(32))
-    private static final byte[] SIGN_MESSAGE = new BigInteger("-23082" +
-            "34156588244362370631618004123835496994044129494255449193" +
-            "5720154682342904").toByteArray();
+    private static final BigInteger MESSAGE = new BigInteger("-23082341565882" +
+            "443623706316180041238354969940441294942554491935720154682342904");
+    // Randomly generated in a jshell shell with:
+    // new BigInteger(new FileInputStream("/dev/random").readNBytes(16))
+    private static final IvParameterSpec IV = new IvParameterSpec(new BigInteger
+            ("24474587988484301349380487490566153560").toByteArray());
     private static boolean dataGenerationMode = false;
 
     private static void initializeFIPS(String nssAdapterLib) throws Exception {
@@ -174,7 +179,7 @@ public final class Main {
             throws Exception {
         Signature sig = getInstance(Signature.class, algorithm);
         sig.initSign(privK);
-        sig.update(SIGN_MESSAGE);
+        sig.update(MESSAGE.toByteArray());
         return sig.sign();
     }
 
@@ -196,10 +201,38 @@ public final class Main {
         // Cross-check by verifying the signature with a non-FIPS provider
         Signature sig = Signature.getInstance(algorithm, crossCheckProvider);
         sig.initVerify(pubK);
-        sig.update(SIGN_MESSAGE);
+        sig.update(MESSAGE.toByteArray());
         if (!sig.verify(performedSignature)) {
             throw new Exception("Signature cross-provider check failed");
         }
+    }
+
+    private static byte[] doCipher(String algorithm, SecretKey key)
+            throws Exception {
+        Cipher cipher = getInstance(Cipher.class, algorithm);
+        cipher.init(Cipher.ENCRYPT_MODE, key, IV);
+        return cipher.doFinal(MESSAGE.toByteArray());
+    }
+
+    private static void checkCipher(String algorithm, String crossCheckProvider,
+            SecretKey key, String expectedCipherText) throws Exception {
+        // Execute two encryption operations in a row to exercise
+        // PKCS11::getNativeKeyInfo and PKCS11::createNativeKey
+        // code (JDK-6913047).
+        byte[] cipherText = doCipher(algorithm, key);
+        cipherText = doCipher(algorithm, key);
+
+        if (expectedCipherText != null) {
+            assertEquals(new BigInteger(expectedCipherText),
+                    new BigInteger(cipherText), "cipher text");
+        }
+
+        // Cross-check by decrypting the cipher text with a non-FIPS provider
+        Cipher cipher = Cipher.getInstance(algorithm, crossCheckProvider);
+        cipher.init(Cipher.DECRYPT_MODE, key, IV);
+        byte[] actualPlainText = cipher.doFinal(cipherText);
+        assertEquals(MESSAGE, new BigInteger(actualPlainText),
+                "cross-provider decrypted message");
     }
 
     private static void logAsBI(String varName, BigInteger number) {
@@ -239,6 +272,10 @@ public final class Main {
         byte[] exported = key.getEncoded();
         Objects.requireNonNull(exported, "Export failed");
         assertEquals(rawKey, new BigInteger(exported), "key bytes");
+
+        checkCipher("AES/CBC/PKCS5Padding", "SunJCE", key, "30621773074265860" +
+                "449352098114637781899050134172166402061231870784000850592602" +
+                "53549466675678934238030319927256335238");
     }
 
     private static void testSecretKeyGenerateAndExport() throws Exception {
@@ -254,6 +291,12 @@ public final class Main {
         assertEquals(keyBytes, exported.length, "key length");
         if (dataGenerationMode) {
             logAsBI("rawKey", new BigInteger(exported));
+
+            System.out.println(System.lineSeparator());
+            String cipherAlg = "AES/CBC/PKCS5Padding";
+            logWrapped("        checkCipher(\"" + cipherAlg +
+                            "\", \"SunJCE\", key, \"",
+                    new BigInteger(doCipher(cipherAlg, key)));
         }
     }
 
