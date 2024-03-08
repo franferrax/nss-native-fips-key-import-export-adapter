@@ -100,7 +100,7 @@ info: $(PREVIOUS_BUILD_MODE)
 
 .PHONY: -test
 -test:
-	$(JAVA)c -d $(BIN_DIR) $(TST_DIR)/Main.java &&                             \
+	$(JAVA)c -d $(BIN_DIR) $(TST_DIR)/Main.java
 	$(JAVA) -cp $(BIN_DIR) Main $(TEST_ARGUMENT)
 
 .PHONY: test ## Run the test suite, usage: make test [JAVA=/path/to/java]

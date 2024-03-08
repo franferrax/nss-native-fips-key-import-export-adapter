@@ -124,6 +124,7 @@ public final class Main {
         System.out.println("TEST PASS - OK");
     }
 
+    @SuppressWarnings("unchecked")
     private static <T> T getInstance(Class<T> serviceClass, String algorithm)
             throws Exception {
         if (dataGenerationMode) {
@@ -175,22 +176,22 @@ public final class Main {
         }
     }
 
-    private static byte[] doSign(String algorithm, PrivateKey privK)
+    private static byte[] doSign(String algorithm, PrivateKey prvK)
             throws Exception {
         Signature sig = getInstance(Signature.class, algorithm);
-        sig.initSign(privK);
+        sig.initSign(prvK);
         sig.update(MESSAGE.toByteArray());
         return sig.sign();
     }
 
     private static void checkSign(String algorithm, String crossCheckProvider,
-            PrivateKey privK, PublicKey pubK, String expectedSignature)
+            PrivateKey prvK, PublicKey pubK, String expectedSignature)
             throws Exception {
         // Execute two sign operations in a row to exercise
         // PKCS11::getNativeKeyInfo and PKCS11::createNativeKey
         // code (JDK-6913047).
-        byte[] performedSignature = doSign(algorithm, privK);
-        performedSignature = doSign(algorithm, privK);
+        byte[] performedSignature = doSign(algorithm, prvK);
+        performedSignature = doSign(algorithm, prvK);
 
         if (expectedSignature != null) {
             assertEquals(new BigInteger(expectedSignature),
@@ -407,51 +408,51 @@ public final class Main {
                 "7682512137336306770008811024491441058352227056724");
 
         KeyFactory kf = getInstance(KeyFactory.class, "RSA");
-        RSAPrivateCrtKey privK = (RSAPrivateCrtKey) kf.generatePrivate(
+        RSAPrivateCrtKey prvK = (RSAPrivateCrtKey) kf.generatePrivate(
                 new RSAPrivateCrtKeySpec(modulus, publicExponent,
                         privateExponent, prime1, prime2, primeExponent1,
                         primeExponent2, coefficient));
 
-        checkKeyClass(privK);
-        Objects.requireNonNull(privK.getEncoded(), "Export failed");
-        assertEquals(modulus, privK.getModulus(), "modulus");
-        assertEquals(publicExponent, privK.getPublicExponent(),
+        checkKeyClass(prvK);
+        Objects.requireNonNull(prvK.getEncoded(), "Export failed");
+        assertEquals(modulus, prvK.getModulus(), "modulus");
+        assertEquals(publicExponent, prvK.getPublicExponent(),
                 "publicExponent");
-        assertEquals(privateExponent, privK.getPrivateExponent(),
+        assertEquals(privateExponent, prvK.getPrivateExponent(),
                 "privateExponent");
-        assertEquals(prime1, privK.getPrimeP(), "prime1 (primeP)");
-        assertEquals(prime2, privK.getPrimeQ(), "prime2 (primeQ)");
-        assertEquals(primeExponent1, privK.getPrimeExponentP(),
+        assertEquals(prime1, prvK.getPrimeP(), "prime1 (primeP)");
+        assertEquals(prime2, prvK.getPrimeQ(), "prime2 (primeQ)");
+        assertEquals(primeExponent1, prvK.getPrimeExponentP(),
                 "primeExponent1 (primeExponentP)");
-        assertEquals(primeExponent2, privK.getPrimeExponentQ(),
+        assertEquals(primeExponent2, prvK.getPrimeExponentQ(),
                 "primeExponent2 (primeExponentQ)");
-        assertEquals(coefficient, privK.getCrtCoefficient(), "coefficient");
+        assertEquals(coefficient, prvK.getCrtCoefficient(), "coefficient");
 
         RSAPublicKey pubK = (RSAPublicKey) kf.generatePublic(
                 new RSAPublicKeySpec(modulus, publicExponent));
         checkKeyClass(pubK);
-        checkSign("SHA256withRSA", "SunRsaSign", privK, pubK, "13100612147691" +
-                "361616255443599473514703614872129979110920102290048479424018" +
-                "944699781634928025680405253556943110292641321523865661503257" +
-                "636662041789231021290974185655111538233322461447235500916863" +
-                "974988236482445620122453822987792817201109882776607599523186" +
-                "768855757582697221018886695162581123327101222866164516206459" +
-                "836227479708754368497622945856906640266562328284171218886177" +
-                "301053219800162718729214038277400782922506824352164793357950" +
-                "266611733987405546752217204212329582408293299532111158120503" +
-                "339397693937026450151992303512850849220386623951898542005960" +
-                "566047533856493548484327918509798581466991730122714145955025" +
-                "111614686754442377879623660609207548212461615153558671919950" +
-                "631194729903339255030169816470182262187027400680632727295274" +
-                "753590787300757201454860022590768995583690838330742088982372" +
-                "017041528444082764728619007880525890775480325982913483495896" +
-                "580177339015052879074126101356809070857566361952160854649531" +
-                "407481370131665912392746050361711926270054057701893151444394" +
-                "430182328779006678315946783946967895438723120911542853475733" +
-                "779379745181164945199389100367251612131834773250034904037189" +
-                "267223705429860689225117820455734315866183846419999269033569" +
-                "721361995692194933660755703076452572982487715397393702734424" +
-                "6516276343010274809");
+        checkSign("SHA256withRSA", "SunRsaSign", prvK, pubK, "131006121476913" +
+                "616162554435994735147036148721299791109201022900484794240189" +
+                "446997816349280256804052535569431102926413215238656615032576" +
+                "366620417892310212909741856551115382333224614472355009168639" +
+                "749882364824456201224538229877928172011098827766075995231867" +
+                "688557575826972210188866951625811233271012228661645162064598" +
+                "362274797087543684976229458569066402665623282841712188861773" +
+                "010532198001627187292140382774007829225068243521647933579502" +
+                "666117339874055467522172042123295824082932995321111581205033" +
+                "393976939370264501519923035128508492203866239518985420059605" +
+                "660475338564935484843279185097985814669917301227141459550251" +
+                "116146867544423778796236606092075482124616151535586719199506" +
+                "311947299033392550301698164701822621870274006806327272952747" +
+                "535907873007572014548600225907689955836908383307420889823720" +
+                "170415284440827647286190078805258907754803259829134834958965" +
+                "801773390150528790741261013568090708575663619521608546495314" +
+                "074813701316659123927460503617119262700540577018931514443944" +
+                "301823287790066783159467839469678954387231209115428534757337" +
+                "793797451811649451993891003672516121318347732500349040371892" +
+                "672237054298606892251178204557343158661838464199992690335697" +
+                "213619956921949336607557030764525729824877153973937027344246" +
+                "516276343010274809");
     }
 
     private static void testRSAPrivateKeyGenerateAndExport() throws Exception {
@@ -460,27 +461,27 @@ public final class Main {
         KeyPair kp = kpg.generateKeyPair();
 
         RSAPublicKey pubK = (RSAPublicKey) kp.getPublic();
-        RSAPrivateCrtKey privK = (RSAPrivateCrtKey) kp.getPrivate();
+        RSAPrivateCrtKey prvK = (RSAPrivateCrtKey) kp.getPrivate();
         checkKeyClass(pubK);
-        checkKeyClass(privK);
-        Objects.requireNonNull(privK.getEncoded(), "Export failed");
-        checkSign("SHA256withRSA", "SunRsaSign", privK, pubK, null);
+        checkKeyClass(prvK);
+        Objects.requireNonNull(prvK.getEncoded(), "Export failed");
+        checkSign("SHA256withRSA", "SunRsaSign", prvK, pubK, null);
 
         if (dataGenerationMode) {
-            logAsBI("modulus", privK.getModulus());
-            logAsBI("publicExponent", privK.getPublicExponent());
-            logAsBI("privateExponent", privK.getPrivateExponent());
-            logAsBI("prime1", privK.getPrimeP());
-            logAsBI("prime2", privK.getPrimeQ());
-            logAsBI("primeExponent1", privK.getPrimeExponentP());
-            logAsBI("primeExponent2", privK.getPrimeExponentQ());
-            logAsBI("coefficient", privK.getCrtCoefficient());
+            logAsBI("modulus", prvK.getModulus());
+            logAsBI("publicExponent", prvK.getPublicExponent());
+            logAsBI("privateExponent", prvK.getPrivateExponent());
+            logAsBI("prime1", prvK.getPrimeP());
+            logAsBI("prime2", prvK.getPrimeQ());
+            logAsBI("primeExponent1", prvK.getPrimeExponentP());
+            logAsBI("primeExponent2", prvK.getPrimeExponentQ());
+            logAsBI("coefficient", prvK.getCrtCoefficient());
 
             System.out.println(System.lineSeparator());
             String signAlg = "SHA256withRSA";
             logWrapped("        checkSign(\"" + signAlg +
-                            "\", \"SunRsaSign\", privK, pubK, \"",
-                    new BigInteger(doSign(signAlg, privK)));
+                            "\", \"SunRsaSign\", prvK, pubK, \"",
+                    new BigInteger(doSign(signAlg, prvK)));
         }
     }
 
@@ -511,20 +512,20 @@ public final class Main {
                 "7749273708962006689187956744210730");
 
         KeyFactory kf = getInstance(KeyFactory.class, "DSA");
-        DSAPrivateKey privK = (DSAPrivateKey) kf.generatePrivate(
+        DSAPrivateKey prvK = (DSAPrivateKey) kf.generatePrivate(
                 new DSAPrivateKeySpec(privateValue, prime, subPrime, base));
 
-        checkKeyClass(privK);
-        Objects.requireNonNull(privK.getEncoded(), "Export failed");
-        assertEquals(privateValue, privK.getX(), "privateValue (X)");
-        assertEquals(prime, privK.getParams().getP(), "prime (P)");
-        assertEquals(subPrime, privK.getParams().getQ(), "subPrime (Q)");
-        assertEquals(base, privK.getParams().getG(), "base (G)");
+        checkKeyClass(prvK);
+        Objects.requireNonNull(prvK.getEncoded(), "Export failed");
+        assertEquals(privateValue, prvK.getX(), "privateValue (X)");
+        assertEquals(prime, prvK.getParams().getP(), "prime (P)");
+        assertEquals(subPrime, prvK.getParams().getQ(), "subPrime (Q)");
+        assertEquals(base, prvK.getParams().getG(), "base (G)");
 
         DSAPublicKey pubK = (DSAPublicKey) kf.generatePublic(
                 new DSAPublicKeySpec(publicValue, prime, subPrime, base));
         checkKeyClass(pubK);
-        checkSign("SHA1withDSA", "SUN", privK, pubK, null);
+        checkSign("SHA1withDSA", "SUN", prvK, pubK, null);
     }
 
     private static void testDSAPrivateKeyGenerateAndExport() throws Exception {
@@ -533,18 +534,18 @@ public final class Main {
         KeyPair kp = kpg.generateKeyPair();
 
         DSAPublicKey pubK = (DSAPublicKey) kp.getPublic();
-        DSAPrivateKey privK = (DSAPrivateKey) kp.getPrivate();
+        DSAPrivateKey prvK = (DSAPrivateKey) kp.getPrivate();
         checkKeyClass(pubK);
-        checkKeyClass(privK);
-        Objects.requireNonNull(privK.getEncoded(), "Export failed");
-        checkSign("SHA1withDSA", "SUN", privK, pubK, null);
+        checkKeyClass(prvK);
+        Objects.requireNonNull(prvK.getEncoded(), "Export failed");
+        checkSign("SHA1withDSA", "SUN", prvK, pubK, null);
 
         if (dataGenerationMode) {
             logAsBI("publicValue", pubK.getY());
-            logAsBI("privateValue", privK.getX());
-            logAsBI("prime", privK.getParams().getP());
-            logAsBI("subPrime", privK.getParams().getQ());
-            logAsBI("base", privK.getParams().getG());
+            logAsBI("privateValue", prvK.getX());
+            logAsBI("prime", prvK.getParams().getP());
+            logAsBI("subPrime", prvK.getParams().getQ());
+            logAsBI("base", prvK.getParams().getG());
         }
     }
 
@@ -563,30 +564,30 @@ public final class Main {
                 "50072853733096533150596936863525916096810784089027");
 
         KeyFactory kf = getInstance(KeyFactory.class, "EC");
-        ECPrivateKey privK = (ECPrivateKey) kf.generatePrivate(
+        ECPrivateKey prvK = (ECPrivateKey) kf.generatePrivate(
                 new ECPrivateKeySpec(privateValue, params));
 
-        checkKeyClass(privK);
-        Objects.requireNonNull(privK.getEncoded(), "Export failed");
-        assertEquals(privateValue, privK.getS(), "privateValue (S)");
+        checkKeyClass(prvK);
+        Objects.requireNonNull(prvK.getEncoded(), "Export failed");
+        assertEquals(privateValue, prvK.getS(), "privateValue (S)");
         assertEquals(params.getCurve().getField(),
-                privK.getParams().getCurve().getField(), "curve field");
+                prvK.getParams().getCurve().getField(), "curve field");
         assertEquals(params.getCurve().getA(),
-                privK.getParams().getCurve().getA(), "curve A");
+                prvK.getParams().getCurve().getA(), "curve A");
         assertEquals(params.getCurve().getB(),
-                privK.getParams().getCurve().getB(), "curve B");
+                prvK.getParams().getCurve().getB(), "curve B");
         assertEquals(params.getGenerator().getAffineX(),
-                privK.getParams().getGenerator().getAffineX(), "generator X");
+                prvK.getParams().getGenerator().getAffineX(), "generator X");
         assertEquals(params.getGenerator().getAffineY(),
-                privK.getParams().getGenerator().getAffineY(), "generator Y");
-        assertEquals(params.getOrder(), privK.getParams().getOrder(), "order");
-        assertEquals(params.getCofactor(), privK.getParams().getCofactor(),
+                prvK.getParams().getGenerator().getAffineY(), "generator Y");
+        assertEquals(params.getOrder(), prvK.getParams().getOrder(), "order");
+        assertEquals(params.getCofactor(), prvK.getParams().getCofactor(),
                 "cofactor");
 
         ECPublicKey pubK = (ECPublicKey) kf.generatePublic(
                 new ECPublicKeySpec(publicPoint, params));
         checkKeyClass(pubK);
-        checkSign("SHA256withECDSA", "SunEC", privK, pubK, null);
+        checkSign("SHA256withECDSA", "SunEC", prvK, pubK, null);
     }
 
     private static void testECPrivateKeyGenerateAndExport() throws Exception {
@@ -595,18 +596,18 @@ public final class Main {
         KeyPair kp = kpg.generateKeyPair();
 
         ECPublicKey pubK = (ECPublicKey) kp.getPublic();
-        ECPrivateKey privK = (ECPrivateKey) kp.getPrivate();
+        ECPrivateKey prvK = (ECPrivateKey) kp.getPrivate();
         checkKeyClass(pubK);
-        checkKeyClass(privK);
-        Objects.requireNonNull(privK.getEncoded(), "Export failed");
-        checkSign("SHA256withECDSA", "SunEC", privK, pubK, null);
+        checkKeyClass(prvK);
+        Objects.requireNonNull(prvK.getEncoded(), "Export failed");
+        checkSign("SHA256withECDSA", "SunEC", prvK, pubK, null);
 
         if (dataGenerationMode) {
             logAsBI("publicX", pubK.getW().getAffineX());
             logAsBI("publicY", pubK.getW().getAffineY());
             System.out.println("        ECPoint publicPoint = " +
                     "new ECPoint(publicX, publicY);");
-            logAsBI("privateValue", privK.getS());
+            logAsBI("privateValue", prvK.getS());
         }
     }
 }
