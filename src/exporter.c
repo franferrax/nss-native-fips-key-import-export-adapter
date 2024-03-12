@@ -289,13 +289,19 @@ CK_RV export_key(key_data_t *key_data, CK_SESSION_HANDLE session,
     for (size_t n = 0; n < n_attributes; n++) {
         dbg_trace_attr("Attribute returned by NSS' C_GetAttributeValue()",
                        attributes[n]);
-        if (attributes[n].type == CKA_SENSITIVE &&
+        if ((attributes[n].type == CKA_SENSITIVE ||
+             attributes[n].type == CKA_ALWAYS_SENSITIVE) &&
             attributes[n].pValue != NULL &&
             attributes[n].ulValueLen >= sizeof(CK_BBOOL)) {
-            // Make the key look as non-sensitive.
-            // The exporter will handle that.
-            dbg_trace("Forcing CKA_SENSITIVE=CK_FALSE to avoid an opaque "
-                      "P11Key object");
+            if (attributes[n].type == CKA_SENSITIVE) {
+                // Make the key look as non-sensitive.
+                // The exporter will handle that.
+                dbg_trace("Forcing CKA_SENSITIVE=CK_FALSE to avoid an opaque "
+                          "P11Key object");
+            } else {
+                dbg_trace("Making CKA_ALWAYS_SENSITIVE=CK_FALSE as we changed "
+                          "the CKA_SENSITIVE value to CK_FALSE");
+            }
             *((CK_BBOOL *)attributes[n].pValue) = CK_FALSE;
         }
         if (attributes[n].ulValueLen == CK_UNAVAILABLE_INFORMATION) {
