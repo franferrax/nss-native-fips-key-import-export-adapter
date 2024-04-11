@@ -296,7 +296,7 @@ CK_RV import_key(CK_OBJECT_CLASS key_class, CK_KEY_TYPE key_type,
         }
         memcpy(modified_attrs, attributes, n_attributes * sizeof(CK_ATTRIBUTE));
         if (sensitive_attr_idx != INVALID_IDX) {
-            dbg_trace("Forcing CKA_SENSITIVE=CK_TURE to avoid being rejected "
+            dbg_trace("Forcing CKA_SENSITIVE=CK_TRUE to avoid being rejected "
                       "by the NSS FIPS token");
             modified_attrs[sensitive_attr_idx].pValue = &bool_true;
             modified_attrs[sensitive_attr_idx].ulValueLen = sizeof(bool_true);

@@ -15,7 +15,7 @@ SHARED_LIBS   = pthread softokn3 nss3
 STATIC_LIBS   = freebl
 CFLAGS        = -shared -fPIC -fvisibility=hidden -Wl,--exclude-libs,ALL       \
                 $(addprefix -l,$(SHARED_LIBS)) -D_GNU_SOURCE                   \
-                $(shell pkg-config --cflags $(DEVEL_PKGS))                     \
+                $(strip $(shell pkg-config --cflags $(DEVEL_PKGS)))            \
                 -Wpedantic -Wall -Wextra -Wconversion -Werror
 REL_CFLAGS    = -O3
 DBG_CFLAGS    = -Wno-error=unused-variable -Wno-error=unused-parameter -DDEBUG \
@@ -41,7 +41,7 @@ CLANG_FORMAT_IGNORED_FILES = $(SRC_DIR)/nss_lowkey_imported.c                  \
 # Build
 #
 
-SRC_FILES = $(wildcard $(SRC_DIR)/*.h) $(wildcard $(SRC_DIR)/*.c)
+SRC_FILES = $(sort $(wildcard $(SRC_DIR)/*.h) $(wildcard $(SRC_DIR)/*.c))
 ifeq ($(wildcard $(DBG_SENTINEL)),$(DBG_SENTINEL))
   PREVIOUS_BUILD_MODE = debug
   CLEAN_IF_PREVIOUS_BUILD_MODE_IS_DEBUG = clean
