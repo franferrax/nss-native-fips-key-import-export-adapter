@@ -14,7 +14,7 @@ LIB_DIR       = $(shell pkg-config --variable=libdir nss-softokn)
 SHARED_LIBS   = pthread softokn3 nss3
 STATIC_LIBS   = freebl
 CFLAGS        = -shared -fPIC -fvisibility=hidden -Wl,--exclude-libs,ALL       \
-                $(addprefix -l,$(SHARED_LIBS)) -D_GNU_SOURCE                   \
+                $(addprefix -l,$(SHARED_LIBS))                                 \
                 $(strip $(shell pkg-config --cflags $(DEVEL_PKGS)))            \
                 -Wpedantic -Wall -Wextra -Wconversion -Werror
 REL_CFLAGS    = -O3

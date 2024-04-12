@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/syscall.h>
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
@@ -111,9 +112,9 @@ void __dbg_trace_header(const char *file, const unsigned int line,
     gettimeofday(&tv, NULL);
     strftime(datetime, sizeof(datetime), "%F %T", gmtime(&tv.tv_sec));
     fprintf(dbg_file,
-            "%s%s.%06ld%s (tid %s%u%s): %s%s%s:%s%d%s, %s%s()%s: ", cyan,
-            datetime, tv.tv_usec, reset, red, gettid(), reset, green, file,
-            reset, magenta, line, reset, yellow, func, reset);
+            "%s%s.%06ld%s (tid %s%lu%s): %s%s%s:%s%d%s, %s%s()%s: ", cyan,
+            datetime, tv.tv_usec, reset, red, syscall(SYS_gettid), reset, green,
+            file, reset, magenta, line, reset, yellow, func, reset);
 }
 
 inline void __dbg_trace_footer() {
