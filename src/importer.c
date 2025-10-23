@@ -10,7 +10,7 @@
 #include <secder.h>
 #include <secoid.h>
 
-#define INVALID_IDX ((CK_ULONG)-1L)
+#define INVALID_IDX ((CK_ULONG) - 1L)
 
 #define __nth_attr_to_SECItem(attr_type, sec_item)                             \
     do {                                                                       \

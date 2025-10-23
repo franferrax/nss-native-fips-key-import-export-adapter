@@ -6,6 +6,8 @@ import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.lang.reflect.Method;
 import java.math.BigInteger;
 import java.nio.file.FileSystem;
@@ -16,6 +18,7 @@ import java.security.AlgorithmParameters;
 import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.Security;
@@ -40,7 +43,6 @@ import java.util.Objects;
 import java.util.regex.Pattern;
 
 public final class Main {
-    private static final String TESTS_METHODS_PREFIX = "test";
     private static final Pattern CAMEL_CASE_SPLITTER =
             Pattern.compile("(?=[A-Z][a-z])");
     private static final String SEPARATOR = System.lineSeparator() +
@@ -58,6 +60,26 @@ public final class Main {
     private static final IvParameterSpec IV = new IvParameterSpec(new BigInteger
             ("24474587988484301349380487490566153560").toByteArray());
     private static boolean dataGenerationMode = false;
+
+    @Retention(RetentionPolicy.RUNTIME)
+    private @interface Test {
+        boolean skippable() default false;
+    }
+
+    private static boolean canSkip(Test test, Throwable t) {
+        // Skippable tests tolerate NoSuchAlgorithmException exceptions
+        if (!dataGenerationMode && test.skippable()) {
+            while (t != null) {
+                if (t instanceof NoSuchAlgorithmException) {
+                    System.out.println(" SKIPPED: " + t);
+                    // t.printStackTrace();
+                    return true;
+                }
+                t = t.getCause();
+            }
+        }
+        return false;
+    }
 
     private static void initializeFIPS(String nssAdapterLib) throws Exception {
         // Find the NSS adapter library
@@ -115,9 +137,17 @@ public final class Main {
             initializeFIPS(args[0]);
         }
         for (Method method : Main.class.getDeclaredMethods()) {
-            if (method.getName().startsWith(TESTS_METHODS_PREFIX)) {
+            Test test = method.getAnnotation(Test.class);
+            if (test != null) {
                 printDescription(method);
-                method.invoke(null);
+                try {
+                    method.invoke(null);
+                    System.out.println(" PASSED");
+                } catch (Exception e) {
+                    if (!canSkip(test, e)) {
+                        throw e;
+                    }
+                }
             }
         }
         System.out.println(SEPARATOR);
@@ -139,12 +169,11 @@ public final class Main {
     }
 
     private static void printDescription(Method method) {
-        String desc = method.getName().substring(TESTS_METHODS_PREFIX.length());
         StringBuilder sb = new StringBuilder(SEPARATOR);
         sb.append(System.lineSeparator());
         int mark = sb.length();
         sb.append(' ');
-        for (String word : CAMEL_CASE_SPLITTER.split(desc)) {
+        for (String word : CAMEL_CASE_SPLITTER.split(method.getName())) {
             sb.append(word).append(' ');
         }
         sb.deleteCharAt(sb.length() - 1);
@@ -256,7 +285,8 @@ public final class Main {
         }
     }
 
-    private static void testSecretKeyImportAndExport() throws Exception {
+    @Test
+    private static void SecretKeyImportAndExport() throws Exception {
         // Symmetric 256 key (randomly generated in a non-FIPS machine with
         // 'make test-data' from testSecretKeyGenerateAndExport)
         BigInteger rawKey = new BigInteger("331609782999261118064459749711703" +
@@ -279,7 +309,8 @@ public final class Main {
                 "53549466675678934238030319927256335238");
     }
 
-    private static void testSecretKeyGenerateAndExport() throws Exception {
+    @Test
+    private static void SecretKeyGenerateAndExport() throws Exception {
         int keyBytes = 32;
 
         KeyGenerator kg = getInstance(KeyGenerator.class, "AES");
@@ -303,7 +334,8 @@ public final class Main {
         }
     }
 
-    private static void testRSAPrivateKeyImportAndExport() throws Exception {
+    @Test
+    private static void RSAPrivateKeyImportAndExport() throws Exception {
         // RSA 4096 key pair (randomly generated in a non-FIPS machine with
         // 'make test-data' from testRSAPrivateKeyGenerateAndExport)
         BigInteger modulus = new BigInteger("84737273339079744212016956420604" +
@@ -455,7 +487,8 @@ public final class Main {
                 "516276343010274809");
     }
 
-    private static void testRSAPrivateKeyGenerateAndExport() throws Exception {
+    @Test
+    private static void RSAPrivateKeyGenerateAndExport() throws Exception {
         KeyPairGenerator kpg = getInstance(KeyPairGenerator.class, "RSA");
         kpg.initialize(4096);
         KeyPair kp = kpg.generateKeyPair();
@@ -485,7 +518,8 @@ public final class Main {
         }
     }
 
-    private static void testDSAPrivateKeyImportAndExport() throws Exception {
+    @Test(skippable = true)
+    private static void DSAPrivateKeyImportAndExport() throws Exception {
         // DSA 1024 key pair (randomly generated in a non-FIPS machine with
         // 'make test-data' from testDSAPrivateKeyGenerateAndExport)
         BigInteger publicValue = new BigInteger("1495744577618661430190874954" +
@@ -528,7 +562,8 @@ public final class Main {
         checkSign("SHA1withDSA", "SUN", prvK, pubK, null);
     }
 
-    private static void testDSAPrivateKeyGenerateAndExport() throws Exception {
+    @Test(skippable = true)
+    private static void DSAPrivateKeyGenerateAndExport() throws Exception {
         KeyPairGenerator kpg = getInstance(KeyPairGenerator.class, "DSA");
         kpg.initialize(1024);
         KeyPair kp = kpg.generateKeyPair();
@@ -549,7 +584,8 @@ public final class Main {
         }
     }
 
-    private static void testECPrivateKeyImportAndExport() throws Exception {
+    @Test
+    private static void ECPrivateKeyImportAndExport() throws Exception {
         // EC secp256r1 key pair (randomly generated in a non-FIPS machine with
         // 'make test-data' from testECPrivateKeyGenerateAndExport)
         AlgorithmParameters p = getInstance(AlgorithmParameters.class, "EC");
@@ -590,7 +626,8 @@ public final class Main {
         checkSign("SHA256withECDSA", "SunEC", prvK, pubK, null);
     }
 
-    private static void testECPrivateKeyGenerateAndExport() throws Exception {
+    @Test
+    private static void ECPrivateKeyGenerateAndExport() throws Exception {
         KeyPairGenerator kpg = getInstance(KeyPairGenerator.class, "EC");
         kpg.initialize(new ECGenParameterSpec("secp256r1"));
         KeyPair kp = kpg.generateKeyPair();
