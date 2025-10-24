@@ -1,0 +1,40 @@
+name: Build and Test
+run-name: For ${{ github.event_name }} on ${{ github.ref }} by ${{ github.actor }}
+on: [ push, pull_request ]
+
+env:
+  WORKSPACE_MOUNT: -v${{ github.workspace }}:${{ github.workspace }}:O
+  FAKE_FIPS_MOUNT: -v${{ github.workspace }}/.github/workflows/container/crypto:/fake/sys/crypto:bind,ro,rprivate
+  FAKE_FIPS_REPL: s:/proc/sys/crypto:/fake/sys/crypto:g
+  OS_VER: stream9
+  JDK_VER: 21
+  IMAGE_TAG: worker
+  NSS_ADAPTER_DEBUG: color
+
+jobs:
+
+  BuildAndTest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out ${{ github.repository }}:${{ github.ref }}@${{ github.sha }}
+        uses: actions/checkout@v5
+
+      - name: Install FIPS package
+        run: sudo apt install linux-image-fips
+
+#      - name: A
+#        run: |
+#          sudo mkdir -p /tmp/crypto
+#          sudo tee /tmp/crypto/fips_enabled <<<"1" >/dev/null
+#          sudo tee /tmp/crypto/fips_name <<<"Linux Kernel Cryptographic API" >/dev/null
+#          uname -r | sudo tee /tmp/crypto/fips_name >/dev/null
+#      - name: B
+#        run: sudo mount --rbind /tmp/crypto /proc/sys/crypto
+
+      - name: Prepare container image
+        working-directory: ${{ github.workspace }}/.github/workflows
+        run: podman build "$FAKE_FIPS_MOUNT" "--build-arg=osver=$OS_VER" "--build-arg=fake_fips_repl=$FAKE_FIPS_REPL" -t "$IMAGE_TAG" container
+
+      - name: Build and test ${{ github.repository }}
+        run: podman run "$FAKE_FIPS_MOUNT" "$WORKSPACE_MOUNT" -eJDK_VER -eGITHUB_WORKSPACE -eFAKE_FIPS_REPL -eNSS_ADAPTER_DEBUG --rm "$IMAGE_TAG"

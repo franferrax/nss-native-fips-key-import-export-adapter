@@ -1,0 +1,15 @@
+ARG osver
+ARG fake_fips_repl
+ENV FAKE_FIPS_REPL=${fake_fips_repl}
+
+FROM quay.io/centos/centos:${osver}
+
+# Set the FIPS crypto policy
+RUN update-crypto-policies --set FIPS
+
+# Install the build dependencies
+RUN dnf install -y git make gcc nss-devel
+
+# Create build and test runner script
+ADD --chmod=0755 run.sh /opt/run.sh
+ENTRYPOINT ["/opt/run.sh"]
